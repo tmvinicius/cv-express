@@ -18,6 +18,8 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.4)
 
+  packages/i18n: {}
+
   packages/schema:
     dependencies:
       nanoid:
@@ -26,6 +28,12 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+
+  packages/templates:
+    dependencies:
+      '@cv-express/schema':
+        specifier: workspace:*
+        version: link:../schema
 
 packages:
 
