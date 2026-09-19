@@ -1,0 +1,14 @@
+\cvSecao{ {{ secoes.experiencias }} }
+{{# experiencias }}
+\cvItem{\cvCampo{ {{ campoCargo }} }{ {{ cargo }} }}{\cvCampo{ {{ campoEmpresa }} }{ {{ empresa }} }{{# cidade }} --- {{ cidade }}{{/ cidade }}}{\cvCampo{ {{ campoPeriodo }} }{ {{ periodo }} }}
+{{# temBullets }}
+\begin{cvBullets}
+{{# bullets }}
+\item {{ . }}
+{{/ bullets }}
+\end{cvBullets}
+{{/ temBullets }}
+{{# descricao }}
+\cvParagrafo{ {{ descricao }} }
+{{/ descricao }}
+{{/ experiencias }}

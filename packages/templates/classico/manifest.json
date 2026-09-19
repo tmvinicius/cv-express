@@ -1,0 +1,16 @@
+{
+  "templateId": "classico",
+  "versao": "1.0.0",
+  "descricao": "Template clássico — uma coluna, sem foto",
+  "schemaMinimo": "0.1.0",
+  "arquivoMestre": "main.tex.hbs",
+  "classe": "cvexpress.cls",
+  "secoesSuportadas": [
+    "cabecalho",
+    "objetivo",
+    "experiencias",
+    "formacao",
+    "habilidades",
+    "idiomas"
+  ]
+}
