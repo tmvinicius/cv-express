@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.turbo/
+coverage/
+
+# Ambiente
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Artefatos de compilação LaTeX (sempre reconstruíveis a partir do CvData)
+*.aux
+*.log
+*.out
+*.pdf
+*.tex.gerado
+tmp/
+
+# Sistema
+.DS_Store
+*.tsbuildinfo
