@@ -31,9 +31,16 @@ importers:
 
   packages/templates:
     dependencies:
+      '@cv-express/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@cv-express/schema':
         specifier: workspace:*
         version: link:../schema
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.4
+        version: 22.20.4
 
 packages:
 
