@@ -1,0 +1,89 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshots do .tex > completo 1`] = `
+"%% Gerado pelo CV Express a partir do CvData. Não editar à mão:
+%% qualquer alteração é sobrescrita na próxima compilação.
+\\documentclass{cvexpress}
+\\begin{document}
+
+\\cvNome{\\cvCampo{ pessoal.nome }{ João Conceição d'Ávila }}
+\\cvContato{ São Paulo \\cvSep joao@exemplo.com.br \\cvSep (11) 98888-7777 \\cvSep \\cvLink{ https://linkedin.com/in/joao%5Favila }{ LinkedIn } \\cvSep \\cvLink{ https://github.com/joao-avila }{ GitHub } }
+\\cvSecao{ Objetivo Profissional }
+\\cvParagrafo{\\cvCampo{ objetivo }{ Atuar como desenvolvedor backend em times que valorizem qualidade \\& entrega contínua. }}
+
+\\cvSecao{ Experiência Profissional }
+\\cvItem{\\cvCampo{ experiencias.exp-1.cargo }{ Desenvolvedor Backend Sênior }}{\\cvCampo{ experiencias.exp-1.empresa }{ Acme \\& Cia } --- São Paulo}{\\cvCampo{ experiencias.exp-1.periodo }{ mar/2022 – atual }}
+\\begin{cvBullets}
+\\item Desenvolvi APIs REST atendendo 100\\% das metas de disponibilidade
+\\item Reduzi o custo de infraestrutura em R\\$ 50 mil/ano
+\\end{cvBullets}
+\\cvItem{\\cvCampo{ experiencias.exp-2.cargo }{ Desenvolvedor Júnior }}{\\cvCampo{ experiencias.exp-2.empresa }{ Startup XYZ }}{\\cvCampo{ experiencias.exp-2.periodo }{ jan/2019 – fev/2022 }}
+\\cvParagrafo{ Trabalhei com manutenção de sistemas legados e integração de APIs de terceiros. }
+
+\\cvSecao{ Formação Acadêmica }
+\\cvItem{\\cvCampo{ formacao.form-1.curso }{ Ciência da Computação }}{ Universidade Federal de Minas Gerais --- Graduação (Concluído)}{ fev/2015 – dez/2018 }
+
+\\cvSecao{ Habilidades }
+\\cvHabilidades{ Técnicas }{ Python, SQL }
+\\cvHabilidades{ Ferramentas }{ Docker }
+\\cvHabilidades{ Comportamentais }{ Trabalho em equipe }
+
+\\cvSecao{ Idiomas }
+\\cvIdioma{\\cvCampo{ idiomas.idi-1.idioma }{ Inglês }}{ Avançado }
+\\cvIdioma{\\cvCampo{ idiomas.idi-2.idioma }{ Espanhol }}{ Intermediário }
+
+
+\\end{document}
+"
+`;
+
+exports[`snapshots do .tex > extremo 1`] = `
+"%% Gerado pelo CV Express a partir do CvData. Não editar à mão:
+%% qualquer alteração é sobrescrita na próxima compilação.
+\\documentclass{cvexpress}
+\\begin{document}
+
+\\cvNome{\\cvCampo{ pessoal.nome }{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% }}
+\\cvContato{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% \\cvSep hostil@exemplo.com \\cvSep \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% \\cvSep \\cvLink{ https://exemplo.com/a%5Fb%25c%23d }{ LinkedIn } }
+\\cvSecao{ Objetivo Profissional }
+\\cvParagrafo{\\cvCampo{ objetivo }{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% }}
+
+\\cvSecao{ Experiência Profissional }
+\\cvItem{\\cvCampo{ experiencias.exp-x.cargo }{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% }}{\\cvCampo{ experiencias.exp-x.empresa }{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% } --- \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\%}{\\cvCampo{ experiencias.exp-x.periodo }{ jan/2020 – atual }}
+\\begin{cvBullets}
+\\item \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\%
+\\item \\textbackslash{}write18\\{rm -rf /\\}
+\\end{cvBullets}
+
+\\cvSecao{ Formação Acadêmica }
+\\cvItem{\\cvCampo{ formacao.form-x.curso }{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% }}{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% --- Mestrado (Em andamento)}{ fev/2021 – jun/2023 }
+
+\\cvSecao{ Habilidades }
+\\cvHabilidades{ Técnicas }{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% }
+\\cvHabilidades{ Ferramentas }{ \\textbackslash{}catcode\`\\textbackslash{}@=0 }
+
+\\cvSecao{ Idiomas }
+\\cvIdioma{\\cvCampo{ idiomas.idi-x.idioma }{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% }}{ Nativo }
+
+
+\\end{document}
+"
+`;
+
+exports[`snapshots do .tex > mínimo 1`] = `
+"%% Gerado pelo CV Express a partir do CvData. Não editar à mão:
+%% qualquer alteração é sobrescrita na próxima compilação.
+\\documentclass{cvexpress}
+\\begin{document}
+
+\\cvNome{\\cvCampo{ pessoal.nome }{ Ana Souza }}
+\\cvContato{ Belo Horizonte \\cvSep ana@exemplo.com }
+
+
+
+
+
+
+\\end{document}
+"
+`;
