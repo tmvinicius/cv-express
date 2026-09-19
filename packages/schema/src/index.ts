@@ -11,3 +11,4 @@ export * from "./data.js";
 export * from "./cv.js";
 export * from "./campo.js";
 export * from "./fabricas.js";
+export * from "./worker.js";
