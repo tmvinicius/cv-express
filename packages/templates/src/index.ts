@@ -7,3 +7,7 @@
 
 export * from "./sanitizar.js";
 export * from "./escape.js";
+export * from "./formatadores.js";
+export * from "./viewModel.js";
+export * from "./motor/renderizar.js";
+export * from "./gerar.js";
