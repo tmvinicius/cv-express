@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar     # build + typecheck + testes — 174 testes devem passar
+pnpm run verificar     # build + typecheck + testes — 273 testes devem passar
 ```
 
 Se isso não passar num repositório limpo, pare e diga. Não construa em cima de
@@ -23,6 +23,10 @@ uma base quebrada.
 **Rode `pnpm run verificar` antes de entregar qualquer mudança.** O build vem
 antes do typecheck porque os pacotes se importam via `dist/`; um build velho
 gera falhas que parecem erro de tipo e não são.
+
+O `pnpm -r` para no primeiro pacote que falha, e os pacotes seguintes nem
+rodam. Para ver o quadro inteiro de uma vez, use
+`pnpm -r --no-bail run test`.
 
 ---
 
@@ -113,11 +117,23 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Aparência do PDF | `packages/templates/classico/cvexpress.cls` |
 | Ordem e presença das seções | `packages/templates/classico/main.tex.hbs` |
 | Rótulos impressos no PDF | `packages/i18n/src/pt-BR.ts` |
+| Currículos de teste (mínimo, completo, hostil) | `packages/templates/src/fixtures.ts` |
 | Sandbox, fila, rotas | `apps/latex-worker/src/` |
+| O que a IA oferece ao resto do projeto | `packages/ai/src/servico.ts` |
+| Regras contra invenção | `packages/ai/src/guardrails.ts` |
+| Provider de IA e variáveis `AI_*` | `packages/ai/src/config.ts` |
+| Tabelas e migração | `packages/db/src/esquema.ts`, `packages/db/migrations/` |
+| Sessões, link mágico, registro de compilações | `packages/db/src/` |
 
 **Regra prática:** se a mudança é de aparência, ela pertence ao `.cls` — o
 arquivo que não contém dado de usuário nem lógica. Se é de formatação de
 valor, pertence a `formatadores.ts`. Nunca ao template.
+
+**Na IA:** o resto do projeto importa só o `CvAiService`. Nada fora de
+`packages/ai` menciona modelo, prompt ou provider, e é isso que permite trocar
+de provider sem refatorar. Os guardrails ficam em código, nunca só no prompt:
+apontar `AI_PROVIDER` para um modelo menor não pode enfraquecer a regra de não
+inventar.
 
 ---
 
@@ -177,6 +193,21 @@ qualquer ataque cuja forma você não previu.
 A primeira versão desse helper usava busca por padrão e reportou 16 falhas
 falsas contra escape correto.
 
+### Importar entre pacotes exige `exports` **e** `dist/`
+
+Um pacote só enxerga de outro o que está declarado em `exports` no
+`package.json` e existe no `dist/`. O build exclui `__tests__/`, então nada
+dali pode ser importado de fora.
+
+Foi o que aconteceu com as fixtures: o worker importava
+`@cv-express/templates/fixtures`, mas elas moravam em `__tests__/` e o subpath
+não existia. A suíte do servidor HTTP (18 testes) nunca chegou a carregar.
+Por isso `fixtures.ts` fica em `src/`, com subpath próprio, e não é
+reexportado pelo `index.ts`, para que código de produção não o importe.
+
+Ao criar um subpath: declare-o em `exports`, confira que o arquivo sai no
+`dist/` e rode `pnpm run verificar`.
+
 ---
 
 ## 5. Convenções
@@ -225,12 +256,10 @@ não vale é divergir em silêncio.
 
 Não invente que existe:
 
-- **`packages/ai`** — a camada de IA. Quando for implementada: interface de
-  domínio que não menciona LLM, porta `LlmProvider`, adapters trocáveis por
-  variável de ambiente, guardrails validados **em código** e não confiados ao
-  prompt.
-- **`apps/web`** — o formulário de 9 etapas e o preview.
-- **Persistência** — Postgres, Drizzle, link mágico por e-mail.
+- **`apps/web`** — o formulário de 9 etapas e o preview. É também quem vai
+  montar `@cv-express/ai` e `@cv-express/db`: hoje nenhum app os consome.
+- **Envio do e-mail do link mágico.** `packages/db` gera o token, guarda só o
+  hash e faz o resgate de uso único. Nada envia o e-mail.
 
 ## 8. A dívida que você precisa saber
 
@@ -250,3 +279,12 @@ Se você for a primeira pessoa a compilar, o roteiro está em
 `apps/latex-worker/README.md`. E se algo ali estiver errado, **corrija o
 comentário junto com o código** — os avisos de "não verificado" devem sumir
 quando deixarem de ser verdade.
+
+**Nenhum provider de IA real é chamado nos testes.** A suíte de contrato de
+`packages/ai` roda só contra o `MockAdapter`, em três modos de suporte a JSON.
+Os adapters Anthropic e OpenAI-compatível não são exercitados contra uma API
+de verdade. O `contrato.test.ts` diz que o roteiro para isso está no README do
+pacote, mas esse README ainda não existe.
+
+`packages/db` não tem essa dívida: os testes aplicam a migração de produção no
+PGlite, que é o próprio Postgres, e exercitam o SQL real.

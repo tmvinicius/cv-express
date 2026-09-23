@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { gerarTex } from "../gerar.js";
 import { construirViewModel } from "../viewModel.js";
-import { cvMinimo, cvCompleto, cvExtremo } from "./fixtures.js";
+import { cvMinimo, cvCompleto, cvExtremo } from "../fixtures.js";
 
 describe("gerarTex — estrutura do documento", () => {
   it("gera um documento LaTeX completo", () => {
