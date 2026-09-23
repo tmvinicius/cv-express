@@ -1,0 +1,20 @@
+%% Documento de aquecimento do cache do Tectonic.
+%%
+%% Exercita os mesmos pacotes que o cvexpress.cls carrega, para que a imagem
+%% final já tenha tudo em cache — o contêiner de produção roda sem rede e não
+%% teria como baixar nada.
+%%
+%% Serve também de teste de fumaça do build: se este documento não compilar,
+%% a imagem não é gerada, e o erro aparece no build e não em produção.
+\documentclass{cvexpress}
+\begin{document}
+\cvNome{Acentuação: ção ã õ é ê á ü ç}
+\cvContato{São Paulo \cvSep teste@exemplo.com \cvSep \cvLink{https://exemplo.com}{Site}}
+\cvSecao{Seção de Teste}
+\cvItem{\cvCampo{teste.cargo}{Cargo}}{Empresa}{jan/2020 – atual}
+\begin{cvBullets}
+\item Item com \% e \& e \_ e \$
+\end{cvBullets}
+\cvHabilidades{Técnicas}{Python, SQL}
+\cvIdioma{Inglês}{Avançado}
+\end{document}
