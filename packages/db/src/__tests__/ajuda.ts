@@ -1,9 +1,7 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { esquema } from "../esquema.js";
+import { aplicarMigracoes } from "../migracoes.js";
 import type { Banco } from "../conexao.js";
 
 /**
@@ -23,9 +21,6 @@ import type { Banco } from "../conexao.js";
  * verificação: estes testes exercitam o SQL real.
  */
 
-const AQUI = path.dirname(fileURLToPath(import.meta.url));
-const MIGRACAO = path.resolve(AQUI, "../../migrations/0000_inicial.sql");
-
 export interface BancoDeTeste {
   db: Banco;
   fechar: () => Promise<void>;
@@ -36,7 +31,7 @@ export async function abrirBancoDeTeste(): Promise<BancoDeTeste> {
 
   // A MESMA migração que roda em produção. Se o .sql quebrar, quebra aqui —
   // que é o ponto de aplicar o arquivo real em vez de recriar as tabelas.
-  await pglite.exec(fs.readFileSync(MIGRACAO, "utf8"));
+  await aplicarMigracoes((sql) => pglite.exec(sql));
 
   // O PGlite é compatível na superfície que consumimos; o cast mantém os
   // repositórios tipados sobre o driver de produção, sem variante para teste.

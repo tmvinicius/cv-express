@@ -6,6 +6,7 @@
  */
 
 export * from "./esquema.js";
+export * from "./migracoes.js";
 export * from "./conexao.js";
 export * from "./sessoes.js";
 export * from "./linkMagico.js";
