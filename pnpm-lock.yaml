@@ -38,6 +38,9 @@ importers:
       '@cv-express/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@cv-express/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@cv-express/schema':
         specifier: workspace:*
         version: link:../../packages/schema

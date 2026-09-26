@@ -15,6 +15,7 @@
   "dependencies": {
     "@cv-express/ai": "workspace:*",
     "@cv-express/db": "workspace:*",
+    "@cv-express/i18n": "workspace:*",
     "@cv-express/schema": "workspace:*",
     "@cv-express/templates": "workspace:*",
     "next": "^15.1.0",
