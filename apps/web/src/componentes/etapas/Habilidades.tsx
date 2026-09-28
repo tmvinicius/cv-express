@@ -7,7 +7,7 @@ import type { Despachar } from "../../formulario/reducer";
 export type EstadoHabilidades =
   | { fase: "ocioso" }
   | { fase: "pensando" }
-  | { fase: "pronta"; itens: { id: string; nome: string; categoria: CategoriaHabilidade }[] }
+  | { fase: "pronta"; itens: { nome: string; categoria: CategoriaHabilidade }[] }
   | { fase: "erro"; mensagem: string };
 
 /**
@@ -91,7 +91,7 @@ export function Habilidades({
               <h3>Sugestão</h3>
               <ul>
                 {estado.itens.map((i) => (
-                  <li key={i.id}>
+                  <li key={i.nome}>
                     {i.nome} ({ptBR.categoriasHabilidade[i.categoria]})
                   </li>
                 ))}

@@ -1,4 +1,5 @@
 import {
+  novoId,
   novaExperiencia,
   novaFormacao,
   novoIdioma,
@@ -52,7 +53,12 @@ export type AcaoCv =
   | { tipo: "idioma:nivel"; id: string; nivel: NivelIdioma }
   // Habilidades
   | { tipo: "hab:texto"; valor: string }
-  | { tipo: "hab:aplicarIa"; itens: { id: string; nome: string; categoria: CategoriaHabilidade }[] }
+  /**
+   * A sugestão chega SEM id: gerar identificador é responsabilidade do app,
+   * não do modelo de linguagem. O redutor atribui, porque já é o dono das
+   * mutações e de onde os ids das outras listas saem.
+   */
+  | { tipo: "hab:aplicarIa"; itens: { nome: string; categoria: CategoriaHabilidade }[] }
   | { tipo: "hab:recusarIa" }
   | { tipo: "hab:remover"; id: string };
 
@@ -223,7 +229,7 @@ export function reduzir(cv: CvData, acao: AcaoCv): CvData {
         ...cv,
         habilidades: {
           ...cv.habilidades,
-          itens: [...acao.itens],
+          itens: acao.itens.map((i) => ({ ...i, id: novoId() })),
           statusIa: "applied",
         },
       };
