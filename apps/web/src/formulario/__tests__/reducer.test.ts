@@ -73,7 +73,7 @@ describe("a IA nunca sobrescreve o texto original", () => {
 
     const depois = reduzir(cv, {
       tipo: "hab:aplicarIa",
-      itens: [{ id: "h1", nome: "Python", categoria: "tecnica" }],
+      itens: [{ nome: "Python", categoria: "tecnica" }],
     });
 
     expect(depois.habilidades.textoOriginal).toBe("python, sql");
@@ -126,7 +126,7 @@ describe("editar o texto invalida a sugestão anterior", () => {
   it("mexer no texto de habilidades limpa os itens", () => {
     const cv = reduzir(
       { ...base(), habilidades: { textoOriginal: "python", itens: [], statusIa: "none" } },
-      { tipo: "hab:aplicarIa", itens: [{ id: "h1", nome: "Python", categoria: "tecnica" }] },
+      { tipo: "hab:aplicarIa", itens: [{ nome: "Python", categoria: "tecnica" }] },
     );
 
     const depois = reduzir(cv, { tipo: "hab:texto", valor: "python, sql" });
@@ -230,5 +230,31 @@ describe("edição de bullet", () => {
       "Segundo, corrigido",
       "Terceiro",
     ]);
+  });
+});
+
+describe("ids das habilidades sugeridas", () => {
+  /**
+   * A IA devolve nome e categoria, sem id — gerar identificador é do app, e
+   * não do modelo. O redutor atribui, pelo mesmo caminho das outras listas.
+   */
+  it("atribui id a cada habilidade aplicada", () => {
+    const cv: CvData = {
+      ...base(),
+      habilidades: { textoOriginal: "python, sql", itens: [], statusIa: "none" },
+    };
+
+    const depois = reduzir(cv, {
+      tipo: "hab:aplicarIa",
+      itens: [
+        { nome: "Python", categoria: "tecnica" },
+        { nome: "SQL", categoria: "tecnica" },
+      ],
+    });
+
+    const ids = depois.habilidades.itens.map((h) => h.id);
+    expect(ids).toHaveLength(2);
+    expect(ids.every((id) => id.length > 0)).toBe(true);
+    expect(new Set(ids).size).toBe(2);
   });
 });
