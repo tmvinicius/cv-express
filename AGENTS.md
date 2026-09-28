@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar     # build + typecheck + testes — 273 testes devem passar
+pnpm run verificar     # build + typecheck + testes — 401 testes devem passar
 ```
 
 Se isso não passar num repositório limpo, pare e diga. Não construa em cima de
@@ -124,16 +124,38 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Provider de IA e variáveis `AI_*` | `packages/ai/src/config.ts` |
 | Tabelas e migração | `packages/db/src/esquema.ts`, `packages/db/migrations/` |
 | Sessões, link mágico, registro de compilações | `packages/db/src/` |
+| Quais etapas existem, validação e progresso | `apps/web/src/formulario/etapas.ts`, `maquina.ts` |
+| Toda mudança no `CvData` feita pelo formulário | `apps/web/src/formulario/reducer.ts` |
+| Quando e como o autosave dispara | `apps/web/src/formulario/useAutosave.ts` |
+| O que o autosave aceita gravar (rascunho × malformado) | `apps/web/src/acoes/sessao.ts` |
+| Fronteira navegador ↔ servidor (Server Actions) | `apps/web/src/acoes/servidor.ts` |
+| Chamada ao latex-worker | `apps/web/src/acoes/compilar.ts` |
+| Telas de cada etapa | `apps/web/src/componentes/etapas/` |
+| Montagem do formulário | `apps/web/src/componentes/FormularioCliente.tsx` |
+| Preview, painel de seções, aviso de páginas | `apps/web/src/componentes/`, `apps/web/src/preview/` |
 
 **Regra prática:** se a mudança é de aparência, ela pertence ao `.cls` — o
 arquivo que não contém dado de usuário nem lógica. Se é de formatação de
 valor, pertence a `formatadores.ts`. Nunca ao template.
 
-**Na IA:** o resto do projeto importa só o `CvAiService`. Nada fora de
-`packages/ai` menciona modelo, prompt ou provider, e é isso que permite trocar
-de provider sem refatorar. Os guardrails ficam em código, nunca só no prompt:
+**Na IA:** o resto do projeto usa só o `CvAiService`. O único ponto fora de
+`packages/ai` que monta o provider é a composição em
+`apps/web/src/acoes/servidor.ts`, via `criarProviderDoAmbiente()`. Nenhum outro
+arquivo menciona modelo, prompt ou provider, e é isso que permite trocar de
+provider sem refatorar. Os guardrails ficam em código, nunca só no prompt:
 apontar `AI_PROVIDER` para um modelo menor não pode enfraquecer a regra de não
 inventar.
+
+**No web:** segredo não atravessa para o navegador. `DATABASE_URL`,
+`WORKER_TOKEN` e a chave da IA são lidos só em Server Actions e páginas de
+servidor. A lógica fica em `acoes/sessao.ts` e `acoes/compilar.ts`, que rodam
+sem o Next e têm testes; `servidor.ts` só resolve configuração e aplica o
+`"use server"`. Mantenha essa divisão: lógica dentro de uma Server Action
+deixa de ser testável sem subir o Next.
+
+Falha de IA e worker fora do ar nunca derrubam o formulário. A pessoa segue com
+o próprio texto e o currículo continua salvo. Não troque esses retornos de
+erro tratados por exceções que cheguem à tela.
 
 ---
 
@@ -208,6 +230,12 @@ reexportado pelo `index.ts`, para que código de produção não o importe.
 Ao criar um subpath: declare-o em `exports`, confira que o arquivo sai no
 `dist/` e rode `pnpm run verificar`.
 
+O `apps/web` não é exceção. O `transpilePackages` do `next.config.ts` faz o
+Next compilar os pacotes, mas a resolução continua passando pelo `exports`,
+que aponta para o `dist/`. Sem `pnpm run build`, o `next dev` e o `next build`
+falham com `Can't resolve '@cv-express/schema'`. O comentário no
+`next.config.ts` diz o contrário e está errado.
+
 ---
 
 ## 5. Convenções
@@ -256,17 +284,38 @@ não vale é divergir em silêncio.
 
 Não invente que existe:
 
-- **`apps/web`** — o formulário de 9 etapas e o preview. É também quem vai
-  montar `@cv-express/ai` e `@cv-express/db`: hoje nenhum app os consome.
+O `apps/web` existe e roda: as 6 etapas de dados, o autosave e as sugestões de
+IA estão ligados à rota `/cv/[id]`. O que ainda falta:
+
+- **O PDF na interface.** `Preview`, `PainelSecoes` e `AvisoPaginas` existem e
+  têm testes, mas nenhuma rota os renderiza. A Server Action `acaoCompilar`
+  existe e ninguém a chama.
+- **Conteúdo das etapas `boas-vindas`, `gerando` e `preview`.** Estão em
+  `ETAPAS`, mas o `FormularioCliente` só desenha as 6 etapas de dados; nessas
+  três aparecem só a barra de progresso e os botões.
+- **O botão "apagar meus dados".** A ação `acaoApagarTudo` existe; nenhum
+  componente a chama.
 - **Envio do e-mail do link mágico.** `packages/db` gera o token, guarda só o
-  hash e faz o resgate de uso único. Nada envia o e-mail.
+  hash e faz o resgate de uso único. Nada envia o e-mail, e o web ainda não
+  oferece o link.
+- **Script de migração e `.env.example`.** A migração se aplica à mão com
+  `psql`; as variáveis de ambiente estão listadas no `README.md`.
 
 ## 8. A dívida que você precisa saber
 
-**Nada de LaTeX foi compilado de verdade.** O ambiente onde este código foi
-escrito não tinha Docker nem Tectonic. Sem verificação:
+**A imagem Docker do worker não constrói.** Tentar construí-la expôs dois
+defeitos no `apps/latex-worker/Dockerfile`, escrito antes de `packages/ai` e
+`packages/db` existirem:
 
-- a construção da imagem
+- a imagem base `ghcr.io/tectonic-typesetting/tectonic:latest` responde 403
+  ao pull anônimo;
+- o estágio `build` copia só os `package.json` de schema, i18n, templates e
+  worker antes do `pnpm install`, mas depois compila todo `packages/**`, e
+  `packages/db` quebra sem `drizzle-orm` e `pg`.
+
+**Nada de LaTeX foi compilado de verdade.** Sem imagem e sem Tectonic
+instalado, continuam sem verificação:
+
 - a compilação `.tex → PDF`
 - o `cvexpress.cls`
 - a macro `\cvCampo` e o formato real do `.aux`

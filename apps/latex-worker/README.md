@@ -2,7 +2,59 @@
 
 Serviço de compilação LaTeX. Recebe `CvData`, devolve PDF.
 
-## Subir localmente
+O app web o chama pelo servidor (`apps/web/src/acoes/compilar.ts`), com o
+token interno — o navegador nunca fala com o worker. Hoje essa chamada existe
+mas a interface ainda não a dispara; veja a seção 7 do `AGENTS.md`.
+
+## Rotas
+
+| Rota | Autenticação | Resposta |
+|---|---|---|
+| `GET /saude` | pública | Estado, compilações ativas, fila e tamanho do cache |
+| `POST /compilar` | `x-worker-token` | PDF em base64, nº de páginas, posições dos campos, `contentHash` |
+
+Erros seguem o contrato de `packages/schema/src/worker.ts`: um `codigo`, uma
+mensagem para o usuário e o `requestId`. O log do LaTeX nunca vai no corpo.
+
+## Subir sem Docker
+
+É o caminho que funciona hoje. A partir da raiz:
+
+```bash
+pnpm install
+pnpm run build                                  # pacotes de packages/
+pnpm --filter @cv-express/latex-worker build    # o worker
+
+cd apps/latex-worker
+PORT=8080 WORKER_TOKEN=um-token-qualquer \
+TECTONIC_CACHE_DIR="$HOME/.cache/cvexpress-tectonic" \
+node dist/index.js
+```
+
+Sem o binário `tectonic` no `PATH` (ou em `TECTONIC_BIN`), o worker sobe e
+responde `/saude`, mas `/compilar` devolve 500 `FALHA_LATEX`. O motivo real
+(`spawn tectonic ENOENT`) aparece só no log do servidor.
+
+O `TECTONIC_CACHE_DIR` precisa ser gravável fora do contêiner: o padrão,
+`/opt/tectonic-cache`, é o cache pré-aquecido da imagem. Fora dela, o Tectonic
+baixa os pacotes LaTeX na primeira compilação — então este modo **não tem a
+sandbox de rede** da imagem. Serve para desenvolver, não para expor.
+
+## Subir com Docker
+
+> ⚠️ **A imagem não constrói hoje.** O `Dockerfile` tem dois defeitos
+> conhecidos, ambos confirmados tentando construí-la:
+>
+> 1. **Imagem base inacessível.** `ghcr.io/tectonic-typesetting/tectonic:latest`
+>    responde 403 ao pull anônimo, e o estágio `latex` depende dela.
+> 2. **Dependências faltando no estágio `build`.** Antes do `pnpm install`,
+>    só entram os `package.json` de schema, i18n, templates e worker. Depois,
+>    `pnpm -r --filter "./packages/**" run build` compila todos os pacotes, e
+>    `packages/db` quebra sem `drizzle-orm` e `pg`. O Dockerfile é anterior a
+>    `packages/ai` e `packages/db`.
+>
+> Os comandos abaixo são os pretendidos, para quando a imagem voltar a
+> construir.
 
 ```bash
 docker build -f apps/latex-worker/Dockerfile -t cvexpress-worker .
@@ -49,14 +101,18 @@ curl -X POST localhost:8080/compilar \
   -d '{"cv": { ... } }' | jq -r .pdf | base64 -d > cv.pdf
 ```
 
+Para um `CvData` válido sem escrever à mão, use as fixtures de
+`@cv-express/templates/fixtures` (`cvMinimo`, `cvCompleto`, `cvExtremo`).
+
 ## O que conferir na primeira compilação
 
-Esta é a parte do projeto que **não pôde ser verificada** no ambiente em que
-foi escrita — não havia Docker nem Tectonic. Na ordem:
+Esta é a parte do projeto que **ainda não foi verificada**: nenhum PDF foi
+gerado de verdade. Na ordem:
 
-1. **A imagem constrói.** O estágio `latex` compila `aquecimento.tex`, que é
-   teste de fumaça: se o `cvexpress.cls` tiver erro, o build falha ali, e não
-   em produção.
+1. **A imagem constrói.** Hoje não constrói — veja o aviso acima. Depois de
+   corrigida, o estágio `latex` compila `aquecimento.tex`, que é teste de
+   fumaça: se o `cvexpress.cls` tiver erro, o build falha ali, e não em
+   produção.
 
 2. **Acentuação no PDF.** Abra o PDF de aquecimento e confira `ção ã õ é ê á`.
    É onde template LaTeX importado costuma quebrar.
@@ -79,6 +135,7 @@ A edição por clique é aprimoramento, não requisito.
 | Variável | Padrão | Para quê |
 |---|---|---|
 | `PORT` | 8080 | |
+| `HOST` | 0.0.0.0 | Interface em que o servidor escuta |
 | `WORKER_TOKEN` | — | Obrigatório em produção; o processo não sobe sem ele |
 | `CONCORRENCIA` | 2 | Compilações simultâneas |
 | `FILA_MAXIMA` | 50 | Acima disso, responde 503 |
@@ -86,6 +143,9 @@ A edição por clique é aprimoramento, não requisito.
 | `CORPO_MAXIMO_BYTES` | 524288 | Teto do corpo da requisição |
 | `CACHE_MAXIMO` | 100 | PDFs guardados em memória |
 | `CACHE_TTL_MS` | 1800000 | Validade da entrada de cache |
+| `LOG_LEVEL` | info | Nível do log do Fastify |
+| `TECTONIC_BIN` | tectonic | Caminho do binário do Tectonic |
+| `TECTONIC_CACHE_DIR` | /opt/tectonic-cache | Cache de pacotes LaTeX; fora do contêiner, aponte para um diretório gravável |
 
 ## Por que o worker não aceita `.tex`
 
