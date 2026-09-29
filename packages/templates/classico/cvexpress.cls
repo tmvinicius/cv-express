@@ -22,10 +22,31 @@
 \RequirePackage{polyglossia}
 \setdefaultlanguage{portuguese}
 
-%% A fonte é embutida na imagem do worker. Nada é baixado em tempo de
-%% compilação — o sandbox roda sem rede.
-\setmainfont{Latin Modern Roman}
-\setsansfont{Latin Modern Sans}
+%% A fonte é carregada pelo NOME DO ARQUIVO, e não pelo nome da família.
+%%
+%% `\setmainfont{Latin Modern Roman}` pede a fonte ao fontconfig do sistema: só
+%% funciona se ela estiver instalada no SO, e faz o Tectonic varrer todas as
+%% fontes da máquina — o que torna a saída dependente do ambiente. Na primeira
+%% compilação real, fora do contêiner, isso falhou com "The font Latin Modern
+%% Roman cannot be found".
+%%
+%% Pelo nome do arquivo, os .otf vêm do bundle do próprio Tectonic (pacote
+%% lm), que já está no cache: nada é baixado em tempo de compilação, o sandbox
+%% continua sem rede, e o PDF sai igual em qualquer máquina.
+\setmainfont{lmroman10}[
+  Extension      = .otf,
+  UprightFont    = *-regular,
+  BoldFont       = *-bold,
+  ItalicFont     = *-italic,
+  BoldItalicFont = *-bolditalic,
+]
+\setsansfont{lmsans10}[
+  Extension      = .otf,
+  UprightFont    = *-regular,
+  BoldFont       = *-bold,
+  ItalicFont     = *-oblique,
+  BoldItalicFont = *-boldoblique,
+]
 
 %% --- Geometria -------------------------------------------------------------
 \RequirePackage[
@@ -75,12 +96,18 @@
 %%  Se o mapa vier vazio ou incompleto, o preview cai para o painel lateral de
 %%  seções: a edição por clique é aprimoramento, nunca requisito.
 %%
-%%  ATENÇÃO — NÃO VERIFICADO AINDA
-%%  Esta macro é a única parte do pacote que não pôde ser exercitada: validá-la
-%%  exige compilar de fato, e o Tectonic não estava disponível no ambiente em
-%%  que o código foi escrito. O resto do caminho (CvData -> .tex) tem teste.
-%%  Ao rodar a primeira compilação, confira no .aux se saíram três entradas por
-%%  campo (@x, @y, @p). É o primeiro item a validar na Parte 4.
+%%  VERIFICADA em compilação real (Tectonic 0.17.0, fixture `completa`). O .aux
+%%  saiu com as três entradas por campo, na forma:
+%%
+%%    \zref@newlabel{ pessoal.nome @x}{\posx{3356429}}
+%%    \zref@newlabel{ pessoal.nome @y}{\posy{52397491}}
+%%    \zref@newlabel{ pessoal.nome @p}{\default{}\page{1}\abspage{1}}
+%%
+%%  Repare nos ESPAÇOS em volta do fieldId: o motor de templates exige
+%%  `{ {{ x }} }` (porque `{{{` é erro por desenho), e o TeX preserva esses
+%%  espaços ao ler #1. Quem consome o .aux precisa cortá-los — `aux.ts` faz
+%%  isso e tem teste para isso. Não tente "corrigir" aqui: mexer no espaçamento
+%%  do template é que quebraria o motor.
 %%
 %%  Usa só API pública do zref — nada de comandos internos com @, que exigiriam
 %%  \makeatletter e quebrariam aqui.

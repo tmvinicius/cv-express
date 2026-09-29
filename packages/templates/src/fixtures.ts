@@ -116,7 +116,10 @@ export function cvExtremo(): CvData {
       nome: veneno,
       cidade: veneno,
       email: "hostil@exemplo.com",
-      telefone: veneno,
+      // O schema limita telefone a 40 caracteres (cv.ts). Sem o corte, o
+      // worker recusava a fixture com DADOS_INVALIDOS e ela nunca chegava ao
+      // LaTeX de verdade.
+      telefone: veneno.slice(0, 40),
       linkedin: "https://exemplo.com/a_b%c#d",
     },
     objetivo: { texto: veneno },

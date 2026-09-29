@@ -1,7 +1,24 @@
 import { describe, it, expect } from "vitest";
 import { gerarTex } from "../gerar.js";
 import { construirViewModel } from "../viewModel.js";
+import { validarCv } from "@cv-express/schema";
 import { cvMinimo, cvCompleto, cvExtremo } from "../fixtures.js";
+
+describe("fixtures", () => {
+  /**
+   * O gerarTex não valida a entrada; o worker valida. Uma fixture fora do
+   * schema passa em todos os testes daqui e é recusada com DADOS_INVALIDOS
+   * no caminho real — foi assim que a fixture hostil nunca chegou ao LaTeX.
+   */
+  it.each([
+    ["mínima", cvMinimo],
+    ["completa", cvCompleto],
+    ["hostil", cvExtremo],
+  ])("a fixture %s é um CvData que o worker aceita", (_nome, fixture) => {
+    const r = validarCv(fixture());
+    expect(r.success ? [] : r.error.issues.map((i) => i.path.join("."))).toEqual([]);
+  });
+});
 
 describe("gerarTex — estrutura do documento", () => {
   it("gera um documento LaTeX completo", () => {
@@ -112,7 +129,7 @@ describe("segurança no caminho completo", () => {
 
   it("percent-encoda a URL do LinkedIn em vez de escapá-la como texto", () => {
     const { tex } = gerarTex(cvExtremo());
-    expect(tex).toContain("https://exemplo.com/a%5Fb%25c%23d");
+    expect(tex).toContain("https://exemplo.com/a\\%5Fb\\%25c\\%23d");
   });
 
   it("preserva acentuação intacta", () => {
