@@ -1,14 +1,26 @@
 "use client";
 
+import { IA_DESLIGADA } from "./mensagensIa";
+
 export type EstadoSugestao =
   | { fase: "ocioso" }
   | { fase: "pensando" }
   | { fase: "pronta"; bullets: string[] }
-  | { fase: "erro"; mensagem: string };
+  /** `tentavel` é falso quando repetir não tem como dar em outra coisa. */
+  | { fase: "erro"; mensagem: string; tentavel: boolean };
 
 export interface AprovacaoIaProps {
   original: string;
   estado: EstadoSugestao;
+  /**
+   * O servidor tem IA configurada?
+   *
+   * Vem de fora porque só o servidor sabe. Com `false`, o botão nasce
+   * desabilitado e com o motivo à vista — antes disto ele parecia funcionar e
+   * só falhava depois do clique, que é a forma mais rápida de perder a
+   * confiança de quem está confiando dados pessoais ao produto.
+   */
+  iaDisponivel?: boolean;
   aoPedir: () => void;
   aoUsar: (bullets: string[]) => void;
   aoManterOriginal: () => void;
@@ -36,6 +48,7 @@ export interface AprovacaoIaProps {
 export function AprovacaoIa({
   original,
   estado,
+  iaDisponivel = true,
   aoPedir,
   aoUsar,
   aoManterOriginal,
@@ -44,18 +57,23 @@ export function AprovacaoIa({
 
   if (estado.fase === "ocioso") {
     return (
-      <div className="ia">
+      <div className={`ia ${iaDisponivel ? "" : "ia--desligada"}`}>
         <button
           type="button"
           onClick={aoPedir}
-          disabled={!temTexto}
+          disabled={!iaDisponivel || !temTexto}
+          /* O `title` é conveniência de mouse; o motivo está escrito abaixo
+             porque botão desabilitado sai da ordem de tabulação e um tooltip
+             sozinho não chega a quem navega por teclado. */
+          {...(iaDisponivel ? {} : { title: IA_DESLIGADA })}
           className="ia__pedir"
         >
           Organizar com ajuda da IA
         </button>
         <p className="ia__explicacao">
-          A IA reescreve o que você digitou em tópicos. Ela não inventa nada —
-          e você decide se usa.
+          {iaDisponivel
+            ? "A IA reescreve o que você digitou em tópicos. Ela não inventa nada — e você decide se usa."
+            : IA_DESLIGADA}
         </p>
       </div>
     );
@@ -73,10 +91,15 @@ export function AprovacaoIa({
     return (
       <div className="ia ia--erro" role="status" aria-live="polite">
         <p>{estado.mensagem}</p>
-        {/* O texto original continua valendo: ninguém fica preso. */}
-        <button type="button" onClick={aoPedir} className="ia__pedir">
-          Tentar de novo
-        </button>
+        {/* O texto original continua valendo: ninguém fica preso. O botão só
+            aparece quando repetir pode dar outro resultado — oferecer "tentar
+            de novo" para um ambiente sem IA seria o mesmo botão morto, uma
+            tela depois. */}
+        {estado.tentavel && (
+          <button type="button" onClick={aoPedir} className="ia__pedir">
+            Tentar de novo
+          </button>
+        )}
       </div>
     );
   }

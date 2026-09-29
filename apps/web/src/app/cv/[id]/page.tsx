@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { criarConexao } from "@cv-express/db";
 import { carregarSessao } from "../../../acoes/sessao";
+import { capacidadesDoAmbiente } from "../../../acoes/capacidades";
 import type { IdEtapa } from "../../../formulario/etapas";
 import { PaginaCliente } from "./PaginaCliente";
 
@@ -21,10 +22,10 @@ export default async function PaginaFormulario({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ etapa?: string }>;
+  searchParams: Promise<{ etapa?: string; item?: string }>;
 }) {
   const { id } = await params;
-  const { etapa } = await searchParams;
+  const { etapa, item } = await searchParams;
 
   const url = process.env["DATABASE_URL"];
   if (!url) throw new Error("DATABASE_URL não configurada.");
@@ -41,6 +42,13 @@ export default async function PaginaFormulario({
       sessionId={id}
       cvInicial={sessao.data}
       etapaInicial={(etapa ?? "pessoal") as IdEtapa}
+      /* `?item=` diz QUAL item da lista abrir. Vem do painel de seções e das
+         sugestões de corte, que sabem exatamente de qual item falam. */
+      itemEmFoco={item}
+      /* Lido aqui, no servidor, e não no navegador: a página já nasce sabendo
+         se a ajuda da IA funciona, e o botão não pisca de habilitado para
+         desabilitado. Só o booleano atravessa — a chave não. */
+      capacidades={capacidadesDoAmbiente()}
     />
   );
 }

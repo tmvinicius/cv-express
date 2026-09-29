@@ -8,6 +8,7 @@ import { Objetivo } from "../etapas/Objetivo";
 import { Experiencias } from "../etapas/Experiencias";
 import { Idiomas } from "../etapas/Idiomas";
 import { AprovacaoIa } from "../AprovacaoIa";
+import { Habilidades } from "../etapas/Habilidades";
 
 afterEach(cleanup);
 
@@ -251,7 +252,11 @@ describe("AprovacaoIa", () => {
       <AprovacaoIa
         {...props}
         aoPedir={aoPedir}
-        estado={{ fase: "erro", mensagem: "Não conseguimos organizar agora." }}
+        estado={{
+          fase: "erro",
+          mensagem: "Não conseguimos organizar agora.",
+          tentavel: true,
+        }}
       />,
     );
 
@@ -265,5 +270,107 @@ describe("AprovacaoIa", () => {
   it("anuncia o processamento de forma educada", () => {
     render(<AprovacaoIa {...props} estado={{ fase: "pensando" }} />);
     expect(screen.getByRole("status").getAttribute("aria-live")).toBe("polite");
+  });
+
+  /**
+   * O defeito relatado: sem token de IA no servidor, o botão existia,
+   * parecia funcionar e não entregava nada. Um botão morto custa mais
+   * confiança do que a ausência do botão.
+   */
+  it("sem IA no servidor, o botão nasce desabilitado e diz por quê", () => {
+    render(
+      <AprovacaoIa {...props} iaDisponivel={false} estado={{ fase: "ocioso" }} />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
+    ).toHaveProperty("disabled", true);
+
+    // O motivo em texto, e não só no `title`: botão desabilitado sai da ordem
+    // de tabulação, e tooltip sozinho não chega a quem usa teclado.
+    expect(screen.getByText(/desligada neste ambiente/i)).toBeDefined();
+  });
+
+  it("com IA no servidor e texto escrito, o botão funciona", () => {
+    render(<AprovacaoIa {...props} iaDisponivel estado={{ fase: "ocioso" }} />);
+
+    expect(
+      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
+    ).toHaveProperty("disabled", false);
+  });
+
+  it("não oferece 'tentar de novo' quando repetir não muda nada", () => {
+    // Ambiente sem IA configurada: o botão de repetir seria o mesmo clique
+    // morto, uma tela depois.
+    render(
+      <AprovacaoIa
+        {...props}
+        estado={{
+          fase: "erro",
+          mensagem: "A ajuda da IA está desligada neste ambiente.",
+          tentavel: false,
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /tentar de novo/i })).toBeNull();
+    expect(screen.getByRole("status").textContent).toMatch(/desligada/i);
+  });
+});
+
+describe("Habilidades", () => {
+  const comTexto = (): CvData =>
+    cv({ habilidades: { textoOriginal: "python, sql", itens: [], statusIa: "none" } });
+
+  it("sem IA no servidor, desabilita a organização e explica", () => {
+    render(
+      <Habilidades
+        cv={comTexto()}
+        despachar={vi.fn()}
+        estado={{ fase: "ocioso" }}
+        iaDisponivel={false}
+        aoPedirSugestao={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
+    ).toHaveProperty("disabled", true);
+    expect(screen.getByText(/desligada neste ambiente/i)).toBeDefined();
+  });
+
+  it("o texto livre continua editável sem IA — o currículo sai igual", () => {
+    // É esta a razão de a falha de IA nunca bloquear: o campo já é um
+    // currículo válido.
+    render(
+      <Habilidades
+        cv={comTexto()}
+        despachar={vi.fn()}
+        estado={{ fase: "ocioso" }}
+        iaDisponivel={false}
+        aoPedirSugestao={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText(/suas habilidades/i)).toHaveProperty(
+      "disabled",
+      false,
+    );
+  });
+
+  it("com IA e texto, o botão funciona", () => {
+    render(
+      <Habilidades
+        cv={comTexto()}
+        despachar={vi.fn()}
+        estado={{ fase: "ocioso" }}
+        iaDisponivel
+        aoPedirSugestao={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
+    ).toHaveProperty("disabled", false);
   });
 });

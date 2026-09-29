@@ -2,13 +2,15 @@
 import { LIMITES, type CategoriaHabilidade, type CvData } from "@cv-express/schema";
 import { ptBR } from "@cv-express/i18n";
 import { Campo } from "../Campo";
+import { IA_DESLIGADA } from "../mensagensIa";
 import type { Despachar } from "../../formulario/reducer";
 
 export type EstadoHabilidades =
   | { fase: "ocioso" }
   | { fase: "pensando" }
   | { fase: "pronta"; itens: { nome: string; categoria: CategoriaHabilidade }[] }
-  | { fase: "erro"; mensagem: string };
+  /** `tentavel` é falso quando repetir não tem como dar em outra coisa. */
+  | { fase: "erro"; mensagem: string; tentavel: boolean };
 
 /**
  * Habilidades: entrada livre, normalizada pela IA.
@@ -25,14 +27,20 @@ export function Habilidades({
   cv,
   despachar,
   estado,
+  iaDisponivel = true,
   aoPedirSugestao,
 }: {
   cv: CvData;
   despachar: Despachar;
   estado: EstadoHabilidades;
+  /** O servidor tem IA configurada? Vem de fora porque só ele sabe. */
+  iaDisponivel?: boolean;
   aoPedirSugestao: () => void;
 }) {
   const h = cv.habilidades;
+  // Sem IA, a única coisa que muda nesta etapa é o botão: o texto livre já é
+  // um currículo válido, e é ele que vai para o PDF.
+  const semTexto = h.textoOriginal.trim() === "";
 
   return (
     <div className="etapa">
@@ -111,11 +119,17 @@ export function Habilidades({
             </section>
           )}
 
-          {(estado.fase === "ocioso" || estado.fase === "erro") && (
+          {!iaDisponivel && estado.fase === "ocioso" && (
+            <p className="ia__explicacao">{IA_DESLIGADA}</p>
+          )}
+
+          {(estado.fase === "ocioso" ||
+            (estado.fase === "erro" && estado.tentavel)) && (
             <button
               type="button"
               onClick={aoPedirSugestao}
-              disabled={h.textoOriginal.trim() === ""}
+              disabled={!iaDisponivel || semTexto}
+              {...(iaDisponivel ? {} : { title: IA_DESLIGADA })}
             >
               Organizar com ajuda da IA
             </button>
