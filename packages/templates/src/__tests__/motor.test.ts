@@ -124,13 +124,16 @@ describe("URLs", () => {
     const saida = renderizar("\\href{ {{& u }} }{link}", {
       u: "https://github.com/foo_bar",
     });
-    expect(saida).toBe("\\href{ https://github.com/foo%5Fbar }{link}");
+    expect(saida).toBe("\\href{ https://github.com/foo\\%5Fbar }{link}");
   });
 
   it("neutraliza fuga pelo argumento da URL", () => {
+    // `\%` é a única sequência com contrabarra que o escape de URL emite;
+    // tirando-a, não pode sobrar contrabarra nem chave.
     const saida = renderizar("{{& u }}", { u: "https://e.com/}{\\input{/x}" });
-    expect(saida).not.toContain("\\");
-    expect(saida).not.toMatch(/[{}]/);
+    const resto = saida.replace(/\\%/g, "");
+    expect(resto).not.toContain("\\");
+    expect(resto).not.toMatch(/[{}]/);
   });
 
   it("lança quando a URL está ausente", () => {

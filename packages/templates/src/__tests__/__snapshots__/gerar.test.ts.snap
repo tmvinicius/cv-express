@@ -7,7 +7,7 @@ exports[`snapshots do .tex > completo 1`] = `
 \\begin{document}
 
 \\cvNome{\\cvCampo{ pessoal.nome }{ João Conceição d'Ávila }}
-\\cvContato{ São Paulo \\cvSep joao@exemplo.com.br \\cvSep (11) 98888-7777 \\cvSep \\cvLink{ https://linkedin.com/in/joao%5Favila }{ LinkedIn } \\cvSep \\cvLink{ https://github.com/joao-avila }{ GitHub } }
+\\cvContato{ São Paulo \\cvSep joao@exemplo.com.br \\cvSep (11) 98888-7777 \\cvSep \\cvLink{ https://linkedin.com/in/joao\\%5Favila }{ LinkedIn } \\cvSep \\cvLink{ https://github.com/joao-avila }{ GitHub } }
 \\cvSecao{ Objetivo Profissional }
 \\cvParagrafo{\\cvCampo{ objetivo }{ Atuar como desenvolvedor backend em times que valorizem qualidade \\& entrega contínua. }}
 
@@ -44,7 +44,7 @@ exports[`snapshots do .tex > extremo 1`] = `
 \\begin{document}
 
 \\cvNome{\\cvCampo{ pessoal.nome }{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% }}
-\\cvContato{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% \\cvSep hostil@exemplo.com \\cvSep \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% \\cvSep \\cvLink{ https://exemplo.com/a%5Fb%25c%23d }{ LinkedIn } }
+\\cvContato{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% \\cvSep hostil@exemplo.com \\cvSep \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 10 \\cvSep \\cvLink{ https://exemplo.com/a\\%5Fb\\%25c\\%23d }{ LinkedIn } }
 \\cvSecao{ Objetivo Profissional }
 \\cvParagrafo{\\cvCampo{ objetivo }{ \\textbackslash{}input\\{/etc/passwd\\} \\} \\{ \\$ \\& \\# \\textasciicircum{} \\_ \\textasciitilde{} \\% 100\\% }}
 

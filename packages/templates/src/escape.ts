@@ -114,7 +114,16 @@ export function escapeLatexParagrafos(bruto: string): TextoLatex {
  * literalmente diferente da pretendida.
  *
  * A solução é percent-encoding, que URLs aceitam nativamente: `%5C` continua
- * sendo a mesma URL para o navegador, e é inofensivo para o LaTeX.
+ * sendo a mesma URL para o navegador.
+ *
+ * Mas o `%` do percent-encoding também precisa sair como `\%`. O `\href` só
+ * aceita `%` cru quando lê a URL diretamente, e aqui ele nunca lê: a URL chega
+ * dentro do argumento de `\cvLink`, que por sua vez está dentro de
+ * `\cvContato`. Quando o LaTeX lê esse argumento, `%` já vale como comentário
+ * e engole o resto da linha, com as chaves de fechamento junto — a primeira
+ * compilação real quebrou assim, com "File ended while scanning use of
+ * \cvContato". A documentação do hyperref prescreve `\%` para esse caso, e o
+ * link final sai com `%` normal.
  */
 const URL_PERIGOSOS = /[\\{}%#^~$&_]/g;
 
@@ -134,7 +143,7 @@ export function escapeLatexUrl(bruto: string): TextoLatex {
   const limpo = sanitizarTexto(bruto).trim();
   const seguro = limpo.replace(URL_PERIGOSOS, (c) => {
     const codigo = c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0");
-    return `%${codigo}`;
+    return `\\%${codigo}`;
   });
   return seguro as TextoLatex;
 }

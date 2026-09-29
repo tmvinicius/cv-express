@@ -168,22 +168,33 @@ describe("caracteres invisíveis", () => {
 
 describe("escapeLatexUrl", () => {
   /**
-   * Aqui a verificação é ainda mais simples que a do texto: a saída é
-   * percent-encoded, então não há escape legítimo com contrabarra. Nenhum
-   * contrabarra e nenhuma chave podem existir, ponto.
+   * Por subtração, como no texto: a única sequência com contrabarra que o
+   * escape de URL pode emitir é `\%`, que prefixa cada percent-encoding.
+   * Tirando-a, não pode sobrar contrabarra, chave nem `%` solto.
+   *
+   * O `%` solto é o vetor que a primeira compilação real expôs: dentro do
+   * argumento de `\cvContato`, ele vira comentário, engole as chaves de
+   * fechamento e o documento termina com um argumento aberto.
    */
   function verificarUrlSegura(saida: string) {
-    expect(saida).not.toContain("\\");
-    expect(saida).not.toMatch(/[{}]/);
+    const resto = saida.replace(/\\%/g, "");
+    expect(resto).not.toContain("\\");
+    expect(resto).not.toMatch(/[{}]/);
+    expect(resto).not.toContain("%");
   }
 
   it("percent-encoda caracteres que quebram o argumento do \\href", () => {
     const saida = escapeLatexUrl("https://exemplo.com/a%b#c");
     verificarUrlSegura(saida);
     expect(saida).not.toContain("#");
-    // O % da entrada vira %25; o # vira %23.
-    expect(saida).toContain("%25");
-    expect(saida).toContain("%23");
+    // O % da entrada vira %25; o # vira %23 — os dois com contrabarra.
+    expect(saida).toContain("\\%25");
+    expect(saida).toContain("\\%23");
+  });
+
+  it("nenhum % sai sem contrabarra, nem o do próprio percent-encoding", () => {
+    verificarUrlSegura(escapeLatexUrl("https://linkedin.com/in/joao_avila"));
+    verificarUrlSegura(escapeLatexUrl("https://e.com/%%%}%"));
   });
 
   it("neutraliza tentativa de sair do argumento da URL", () => {
@@ -194,9 +205,10 @@ describe("escapeLatexUrl", () => {
     expect(escapeLatexUrl("https://github.com/tmvinicius")).toBe(
       "https://github.com/tmvinicius",
     );
-    // Sublinhado é comum em usuário e vira %5F — a URL continua válida.
+    // Sublinhado é comum em usuário e vira \%5F; o link final no PDF sai
+    // como %5F, que o navegador trata como o mesmo "_".
     expect(escapeLatexUrl("https://github.com/foo_bar")).toBe(
-      "https://github.com/foo%5Fbar",
+      "https://github.com/foo\\%5Fbar",
     );
   });
 });
