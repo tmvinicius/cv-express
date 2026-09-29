@@ -1,0 +1,144 @@
+/*
+ * Tokens de design.
+ *
+ * As cores aqui repetem packages de paleta.ts, e essa duplicação é
+ * deliberada: o CSS precisa dos valores como variáveis, o teste de contraste
+ * precisa deles como dado JavaScript. Um teste compara os dois arquivos e
+ * reprova a build se divergirem — duas fontes de verdade que se contradizem
+ * em silêncio são pior que uma fonte ruim.
+ *
+ * Ao mexer numa cor: mude nos dois, rode o teste, confira a razão.
+ */
+
+:root {
+  /* ─── cores: tema claro ─────────────────────────────────────────────── */
+  --cor-fundo: #FCFCFB;
+  --cor-superficie: #F2F3F1;
+  --cor-superficie-elevada: #FFFFFF;
+
+  --cor-texto: #1A1D1C;
+  --cor-texto-suave: #525A58;
+
+  --cor-primaria: #17535F;
+  --cor-primaria-hover: #0F3C45;
+  --cor-primaria-suave: #E3EFF1;
+
+  --cor-borda: #CBD1CF;
+  --cor-borda-forte: #79827F;
+
+  --cor-erro: #9E2A2A;
+  --cor-erro-fundo: #FBEAEA;
+  --cor-sucesso: #1D5E43;
+  --cor-sucesso-fundo: #E6F2EC;
+  --cor-atencao: #7A4E00;
+  --cor-atencao-fundo: #FBF0DC;
+
+  --cor-foco: #17535F;
+
+  /* ─── tipografia ────────────────────────────────────────────────────── */
+
+  /*
+   * Pilha do sistema, sem webfont. Uma webfont custa uma requisição
+   * bloqueante no primeiro carregamento, e boa parte do público entra pelo
+   * celular em rede ruim. A fonte bonita é a do PDF — é ela que o
+   * recrutador vê.
+   */
+  --fonte: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --fonte-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    monospace;
+
+  /* Escala 1,2 a partir de 16px. Razão modesta de propósito: o formulário é
+     denso, e uma escala agressiva empurraria o campo para fora da tela. */
+  --texto-xs: 0.75rem;
+  --texto-sm: 0.875rem;
+  --texto-base: 1rem;
+  --texto-lg: 1.2rem;
+  --texto-xl: 1.44rem;
+  --texto-2xl: 1.728rem;
+
+  --peso-normal: 400;
+  --peso-medio: 550;
+  --peso-forte: 650;
+
+  --altura-linha: 1.55;
+  --altura-linha-apertada: 1.25;
+
+  /* ─── espaçamento ───────────────────────────────────────────────────── */
+  --esp-1: 0.25rem;
+  --esp-2: 0.5rem;
+  --esp-3: 0.75rem;
+  --esp-4: 1rem;
+  --esp-5: 1.5rem;
+  --esp-6: 2rem;
+  --esp-7: 3rem;
+
+  /* ─── formas ────────────────────────────────────────────────────────── */
+  --raio-sm: 4px;
+  --raio: 8px;
+  --raio-lg: 12px;
+
+  --sombra-sutil: 0 1px 2px rgb(0 0 0 / 6%);
+  --sombra: 0 2px 8px rgb(0 0 0 / 8%);
+
+  /* ─── movimento ─────────────────────────────────────────────────────── */
+
+  /* Curto o bastante para não atrasar quem já sabe o que quer. Acima de
+     ~200ms a interface passa a parecer preguiçosa em vez de suave. */
+  --transicao: 150ms ease-out;
+  --transicao-lenta: 300ms ease-out;
+
+  /* ─── medidas ───────────────────────────────────────────────────────── */
+
+  /* ~68 caracteres. Linha longa faz o olho perder o começo da seguinte. */
+  --largura-leitura: 34rem;
+  --largura-formulario: 42rem;
+
+  /* Alvo de toque mínimo do WCAG 2.5.5. Vale para botão, checkbox e para os
+     botões de "remover" das listas, que é onde o erro de toque dói. */
+  --alvo-toque: 44px;
+
+  color-scheme: light;
+}
+
+/*
+ * Tema escuro por preferência do sistema.
+ *
+ * Não é a paleta clara invertida: cor saturada sobre fundo escuro "vibra", e
+ * a borda parece tremer. As cores de destaque são clareadas e dessaturadas,
+ * e o fundo é cinza-esverdeado, não preto — preto puro com texto claro
+ * produz halo em tela OLED.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --cor-fundo: #141817;
+    --cor-superficie: #1C2221;
+    --cor-superficie-elevada: #242B29;
+
+    --cor-texto: #E8EDEB;
+    --cor-texto-suave: #A6B0AD;
+
+    --cor-primaria: #7FC4D2;
+    --cor-primaria-hover: #A5D8E2;
+    --cor-primaria-suave: #1B3A40;
+
+    --cor-borda: #39423F;
+    --cor-borda-forte: #6C7874;
+
+    --cor-erro: #F2A0A0;
+    --cor-erro-fundo: #3A1E1E;
+    --cor-sucesso: #8FD4B4;
+    --cor-sucesso-fundo: #14312A;
+    --cor-atencao: #E4BC74;
+    --cor-atencao-fundo: #332714;
+
+    --cor-foco: #7FC4D2;
+
+    /* Sombra por luz não funciona no escuro: escurecer o que já é escuro não
+       produz elevação. A elevação vem da superfície mais clara. */
+    --sombra-sutil: none;
+    --sombra: 0 2px 12px rgb(0 0 0 / 40%);
+
+    color-scheme: dark;
+  }
+}

@@ -1,0 +1,839 @@
+/*
+ * Aparência dos componentes.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * POR QUE CSS SEMÂNTICO E NÃO TAILWIND (o planejamento dizia Tailwind)
+ *
+ * A divergência está registrada aqui porque é aqui que ela vive. O motivo é
+ * o mesmo que separa cvexpress.cls de main.tex.hbs no lado do LaTeX: o
+ * componente é dono da estrutura e da acessibilidade, o design system é dono
+ * da aparência. Com utilitários, a decisão visual volta para dentro do
+ * .tsx, e "mudar a cor de erro" deixa de ser uma linha e passa a ser uma
+ * varredura.
+ *
+ * Duas consequências práticas pesaram:
+ *
+ * 1. Os componentes das Partes 8 e 9 já usam classes semânticas
+ *    (campo__erro, ia--comparacao). Adotar Tailwind agora seria reescrevê-los
+ *    sem mudar nada que o usuário veja.
+ * 2. Os testes consultam por papel e rótulo (getByRole, getByLabelText),
+ *    nunca por classe. Então a suíte sobrevive a qualquer das duas escolhas
+ *    — o que significa que a decisão pode ser revista sem risco, se você
+ *    preferir Tailwind quando o número de telas crescer.
+ *
+ * O que NÃO vale: as duas coisas ao mesmo tempo. Aí não há mais um lugar
+ * onde a aparência mora.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+
+/* ═══ Esqueleto do formulário ═════════════════════════════════════════ */
+
+.formulario {
+  max-width: var(--largura-formulario);
+  margin: 0 auto;
+  padding: var(--esp-4);
+  min-height: 100dvh; /* dvh e não vh: a barra do navegador móvel some */
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-5);
+}
+
+.formulario__cabecalho {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-3);
+}
+
+.formulario__conteudo {
+  flex: 1;
+}
+
+.formulario__erros {
+  background: var(--cor-erro-fundo);
+  color: var(--cor-erro);
+  border-left: 3px solid var(--cor-erro);
+  border-radius: var(--raio-sm);
+  padding: var(--esp-3) var(--esp-4);
+}
+
+.formulario__erros ul {
+  margin-top: var(--esp-2);
+}
+
+.formulario__erros li::before {
+  content: "— ";
+}
+
+.formulario__navegacao {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-3);
+  padding-top: var(--esp-4);
+  border-top: 1px solid var(--cor-borda);
+
+  /* Fica ao alcance do polegar no celular sem tirar o campo da tela. */
+  position: sticky;
+  bottom: 0;
+  background: var(--cor-fundo);
+}
+
+/* ═══ Botões ══════════════════════════════════════════════════════════ */
+
+.formulario__navegacao button,
+.lista__adicionar,
+.ia__pedir,
+.ia__acoes button,
+.preview__baixar {
+  min-height: var(--alvo-toque);
+  padding: var(--esp-2) var(--esp-5);
+  border-radius: var(--raio);
+  font-weight: var(--peso-medio);
+  transition:
+    background-color var(--transicao),
+    border-color var(--transicao);
+}
+
+/* Avançar, aplicar sugestão, baixar: um destaque por tela. Dois botões
+   igualmente fortes deixam de indicar o caminho. */
+.formulario__navegacao button[type="submit"],
+.ia__acoes button:first-child,
+.preview__baixar {
+  background: var(--cor-primaria);
+  color: var(--cor-fundo);
+}
+
+.formulario__navegacao button[type="submit"]:hover:not(:disabled),
+.ia__acoes button:first-child:hover,
+.preview__baixar:hover {
+  background: var(--cor-primaria-hover);
+}
+
+.formulario__navegacao button[type="button"],
+.lista__adicionar,
+.ia__pedir,
+.ia__acoes button + button {
+  border: 1px solid var(--cor-borda-forte);
+  color: var(--cor-primaria);
+  background: var(--cor-superficie-elevada);
+}
+
+.formulario__navegacao button[type="button"]:hover,
+.lista__adicionar:hover,
+.ia__pedir:hover,
+.ia__acoes button + button:hover {
+  background: var(--cor-primaria-suave);
+}
+
+button:disabled {
+  /* Opacidade sozinha reprovaria em AA. O par continua medido: a cor cai
+     para textoSuave, que é testado sobre os dois fundos. */
+  color: var(--cor-texto-suave);
+  border-color: var(--cor-borda);
+  background: var(--cor-superficie);
+  cursor: not-allowed;
+}
+
+/* ═══ Barra de progresso ══════════════════════════════════════════════ */
+
+.barra-progresso {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.barra-progresso__rotulo {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+}
+
+.barra-progresso__trilho {
+  height: 6px;
+  background: var(--cor-superficie);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barra-progresso__preenchimento {
+  height: 100%;
+  background: var(--cor-primaria);
+  border-radius: 999px;
+
+  /*
+   * A gamificação inteira do projeto está nesta linha.
+   *
+   * O planejamento pede "encorajar sem infantilizar": a barra cresce com
+   * suavidade e nada mais acontece — sem confete, sem medalha, sem salto.
+   * Quem monta currículo costuma estar desempregado; comemoração
+   * exagerada num momento desses soa como deboche. O que tranquiliza é ver
+   * o fim se aproximando.
+   *
+   * 300ms porque abaixo disso o crescimento não é percebido como
+   * movimento, e o ganho — a sensação de avanço — se perde.
+   *
+   * prefers-reduced-motion desliga isto em base.css.
+   */
+  transition: width var(--transicao-lenta);
+}
+
+/* ═══ Trilha de etapas ════════════════════════════════════════════════ */
+
+/*
+ * O mapa do formulário.
+ *
+ * Mobile-first de verdade aqui: no celular caberiam seis rótulos só em fonte
+ * de 9px, então o estreito mostra as bolinhas e o rótulo apenas da etapa
+ * atual. O texto das outras continua NO DOM (só escondido), porque quem usa
+ * leitor de tela precisa da lista inteira — e porque a largura da tela não
+ * diz nada sobre a necessidade de quem está lendo.
+ */
+
+.trilha__lista {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-1);
+}
+
+.trilha__etapa {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.trilha__alvo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--esp-1);
+  padding: var(--esp-2) var(--esp-1);
+  border-radius: var(--raio);
+  color: var(--cor-texto-suave);
+  font-size: var(--texto-xs);
+  text-align: center;
+  transition:
+    background-color var(--transicao),
+    color var(--transicao);
+}
+
+/* Só o que é botão reage ao ponteiro. A etapa fixa não finge ser clicável. */
+button.trilha__alvo:hover {
+  background: var(--cor-primaria-suave);
+  color: var(--cor-primaria);
+}
+
+/*
+ * A bolinha.
+ *
+ * O número dentro dela some quando a etapa fica pronta e vira "✓": a marca
+ * carrega o estado, e a cor apenas reforça. Quem não distingue as cores lê o
+ * símbolo; quem usa leitor de tela ouve a palavra.
+ */
+.trilha__marca {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  border: 2px solid var(--cor-borda-forte);
+  background: var(--cor-fundo);
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-medio);
+  line-height: 1;
+}
+
+.trilha__rotulo {
+  display: block;
+  /* Duas linhas no máximo; "Experiências" não pode empurrar a trilha. */
+  overflow-wrap: anywhere;
+}
+
+.trilha__opcional {
+  display: block;
+  font-size: var(--texto-xs);
+  color: var(--cor-texto-suave);
+  opacity: 0.85;
+}
+
+/* ─── estados ─────────────────────────────────────────────────────────── */
+
+.trilha__etapa--concluida .trilha__marca {
+  background: var(--cor-primaria);
+  border-color: var(--cor-primaria);
+  color: var(--cor-fundo);
+}
+
+/* Pulada não é falha: borda tracejada e cor neutra, nunca vermelho. Quem
+   está no primeiro emprego não errou nada. */
+.trilha__etapa--pulada .trilha__marca {
+  border-style: dashed;
+  color: var(--cor-texto-suave);
+}
+
+.trilha__etapa--atual .trilha__alvo {
+  color: var(--cor-primaria);
+  font-weight: var(--peso-medio);
+}
+
+.trilha__etapa--atual .trilha__marca {
+  border-color: var(--cor-primaria);
+  color: var(--cor-primaria);
+
+  /* Anel externo em vez de borda mais grossa: engrossar a borda mexeria no
+     tamanho da bolinha e a trilha inteira dançaria a cada etapa. */
+  box-shadow: 0 0 0 3px var(--cor-primaria-suave);
+}
+
+.trilha__etapa--atual.trilha__etapa--concluida .trilha__marca {
+  color: var(--cor-fundo);
+}
+
+.trilha__etapa--inalcancavel .trilha__alvo {
+  opacity: 0.55;
+}
+
+/* ─── estreito: bolinhas, e o rótulo só de onde a pessoa está ─────────── */
+
+@media (max-width: 40rem) {
+  .trilha__etapa:not(.trilha__etapa--atual) .trilha__rotulo,
+  .trilha__opcional {
+    /* As mesmas regras de .apenas-leitor: sai da tela, continua no DOM. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .trilha__etapa--atual {
+    /* A etapa atual ganha o espaço que o rótulo precisa; as outras viram
+       bolinha. */
+    flex: 2;
+  }
+}
+
+/* ═══ Autosave ════════════════════════════════════════════════════════ */
+
+.autosave {
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+  min-height: 1.5em; /* reserva o espaço: sem isto o texto abaixo pula */
+}
+
+.autosave--salvo {
+  color: var(--cor-sucesso);
+}
+
+.autosave--erro {
+  color: var(--cor-erro);
+}
+
+/* ═══ Etapas ══════════════════════════════════════════════════════════ */
+
+.etapa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+.etapa__apoio {
+  color: var(--cor-texto-suave);
+  max-width: var(--largura-leitura);
+}
+
+.exemplos {
+  background: var(--cor-superficie);
+  border-radius: var(--raio);
+  padding: var(--esp-3) var(--esp-4);
+  font-size: var(--texto-sm);
+}
+
+.exemplos summary {
+  cursor: pointer;
+  color: var(--cor-primaria);
+  font-weight: var(--peso-medio);
+}
+
+.exemplos li {
+  margin-top: var(--esp-2);
+  color: var(--cor-texto-suave);
+}
+
+/* ═══ Campo ═══════════════════════════════════════════════════════════ */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-1);
+}
+
+.campo__rotulo {
+  font-weight: var(--peso-medio);
+  font-size: var(--texto-sm);
+}
+
+.campo__entrada {
+  padding: var(--esp-3);
+  min-height: var(--alvo-toque);
+  background: var(--cor-superficie-elevada);
+  border: 1px solid var(--cor-borda-forte);
+  border-radius: var(--raio);
+  transition: border-color var(--transicao);
+}
+
+.campo__entrada:hover {
+  border-color: var(--cor-primaria);
+}
+
+.campo__ajuda {
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+}
+
+.campo__erro {
+  font-size: var(--texto-sm);
+  color: var(--cor-erro);
+  font-weight: var(--peso-medio);
+}
+
+/*
+ * A borda vermelha é redundante de propósito.
+ *
+ * Cor sozinha não comunica erro para quem tem daltonismo (WCAG 1.4.1), e
+ * cerca de 8% dos homens têm alguma forma. Quem não distingue a borda lê o
+ * texto de campo__erro, que o aria-describedby também entrega ao leitor de
+ * tela. Três caminhos para a mesma informação.
+ */
+.campo--erro .campo__entrada {
+  border-color: var(--cor-erro);
+  border-width: 2px;
+}
+
+/* ═══ Listas editáveis ════════════════════════════════════════════════ */
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+.lista__itens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+.lista__item {
+  background: var(--cor-superficie);
+  border-radius: var(--raio-lg);
+  padding: var(--esp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-3);
+}
+
+.lista__vazio {
+  color: var(--cor-texto-suave);
+  font-style: italic;
+}
+
+.lista__remover {
+  align-self: flex-end;
+  min-height: var(--alvo-toque);
+  min-width: var(--alvo-toque);
+  padding: 0 var(--esp-3);
+  color: var(--cor-erro);
+  border-radius: var(--raio);
+  font-size: var(--texto-sm);
+}
+
+.lista__remover:hover {
+  background: var(--cor-erro-fundo);
+}
+
+/* ═══ Aprovação da IA ═════════════════════════════════════════════════ */
+
+.ia {
+  background: var(--cor-primaria-suave);
+  border-radius: var(--raio);
+  padding: var(--esp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-3);
+}
+
+.ia__explicacao,
+.ia--pensando {
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+}
+
+.ia--erro {
+  background: var(--cor-atencao-fundo);
+  color: var(--cor-atencao);
+}
+
+/* Sem IA configurada, o bloco deixa de ter cor de convite: azul-petróleo em
+   volta de um botão desabilitado promete o que o ambiente não entrega. */
+.ia--desligada {
+  background: var(--cor-superficie);
+}
+
+.ia__pedir:disabled {
+  color: var(--cor-texto-suave);
+  border-color: var(--cor-borda);
+  background: var(--cor-superficie);
+  cursor: not-allowed;
+}
+
+/*
+ * Lado a lado, com o original à ESQUERDA.
+ *
+ * A ordem não é estética. O padrão de leitura ocidental dá precedência ao
+ * primeiro elemento, e o que o produto promete é que o texto da pessoa vem
+ * primeiro e a sugestão é opcional. Inverter sugeriria que a versão da IA é
+ * a "correta" e a dela, o rascunho.
+ *
+ * Em telas estreitas empilha, e a ordem do DOM preserva a mesma precedência.
+ */
+.ia--comparacao {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--esp-4);
+}
+
+@media (min-width: 40rem) {
+  .ia--comparacao {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ia__acoes {
+    grid-column: 1 / -1;
+  }
+}
+
+.ia__lado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.ia__titulo {
+  font-size: var(--texto-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cor-texto-suave);
+}
+
+.ia__original {
+  white-space: pre-wrap; /* preserva as quebras que a pessoa digitou */
+}
+
+.ia__bullets,
+.bullets-aplicados ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.ia__bullets li::before,
+.bullets-aplicados li::before {
+  content: "▸ ";
+  color: var(--cor-primaria);
+}
+
+.ia__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-3);
+}
+
+.bullets-aplicados {
+  background: var(--cor-sucesso-fundo);
+  border-radius: var(--raio);
+  padding: var(--esp-3) var(--esp-4);
+}
+
+/* ═══ Habilidades ═════════════════════════════════════════════════════ */
+
+.habilidades-aplicadas ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-2);
+  margin-top: var(--esp-2);
+}
+
+.habilidades-aplicadas li {
+  background: var(--cor-superficie-elevada);
+  border: 1px solid var(--cor-borda);
+  border-radius: 999px;
+  padding: var(--esp-1) var(--esp-3);
+  font-size: var(--texto-sm);
+}
+
+.habilidade__categoria {
+  color: var(--cor-texto-suave);
+  font-size: var(--texto-xs);
+  margin-left: var(--esp-1);
+}
+
+/* ═══ Preview e download ══════════════════════════════════════════════ */
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-3);
+}
+
+.preview__documento {
+  width: 100%;
+  aspect-ratio: 1 / 1.414; /* A4 — sem isto o iframe nasce com 150px */
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  background: var(--cor-superficie-elevada);
+}
+
+.preview__vazio {
+  aspect-ratio: 1 / 1.414;
+  border: 1px dashed var(--cor-borda-forte);
+  border-radius: var(--raio);
+  background: var(--cor-superficie);
+}
+
+.preview__status {
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+  min-height: 1.5em;
+}
+
+.preview__baixar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  align-self: flex-start;
+}
+
+.preview--erro {
+  background: var(--cor-erro-fundo);
+  color: var(--cor-erro);
+  border-radius: var(--raio);
+  padding: var(--esp-4);
+}
+
+.preview__consolo {
+  color: var(--cor-texto);
+  font-size: var(--texto-sm);
+  margin-top: var(--esp-2);
+}
+
+/* ═══ Painel de seções ════════════════════════════════════════════════ */
+
+.painel-secoes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-3);
+}
+
+.painel-secoes__titulo {
+  font-size: var(--texto-lg);
+}
+
+.painel-secoes__item {
+  width: 100%;
+  min-height: var(--alvo-toque);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-1);
+  padding: var(--esp-3);
+  background: var(--cor-superficie);
+  border: 1px solid transparent;
+  border-radius: var(--raio);
+  transition:
+    background-color var(--transicao),
+    border-color var(--transicao);
+}
+
+.painel-secoes__item:hover {
+  background: var(--cor-primaria-suave);
+  border-color: var(--cor-primaria);
+}
+
+.painel-secoes__rotulo {
+  font-weight: var(--peso-medio);
+}
+
+.painel-secoes__resumo {
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+
+  /* O resumo identifica o item ("Dev / Acme"); truncar em uma linha mantém
+     a lista escaneável, que é a razão de ela existir. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ═══ Aviso de páginas ════════════════════════════════════════════════ */
+
+/*
+ * Tom: recomendação, não reprovação.
+ *
+ * Fundo de atenção e não de erro, porque não há erro nenhum — passar de uma
+ * página é uma escolha legítima, e o download continua liberado. O
+ * planejamento é explícito: "aviso sem caminho de ação vira culpa, não
+ * ajuda". Por isso as sugestões são botões, e não texto.
+ */
+.aviso-paginas {
+  background: var(--cor-atencao-fundo);
+  border-left: 3px solid var(--cor-atencao);
+  border-radius: var(--raio-sm);
+  padding: var(--esp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.aviso-paginas__titulo {
+  font-weight: var(--peso-medio);
+  color: var(--cor-atencao);
+}
+
+.aviso-paginas__corpo {
+  font-size: var(--texto-sm);
+}
+
+.aviso-paginas__sugestoes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  margin-top: var(--esp-1);
+}
+
+.aviso-paginas__sugestoes button {
+  min-height: var(--alvo-toque);
+  text-align: left;
+  color: var(--cor-primaria);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: var(--texto-sm);
+}
+
+
+/*
+ * Item para onde a pessoa acabou de ser levada.
+ *
+ * O foco já vai para o primeiro campo do item, mas o anel de foco sozinho
+ * responde "onde estou", não "é este o item que você pediu" — com cinco
+ * experiências parecidas na tela, são perguntas diferentes. A borda responde
+ * a segunda, e em cor primária e não de erro: chegar aqui é o produto
+ * funcionando.
+ */
+.lista__item--destacado {
+  border-left: 3px solid var(--cor-primaria);
+  padding-left: var(--esp-3);
+  background: var(--cor-primaria-suave);
+}
+
+/* ═══ Apagar meus dados (LGPD) ════════════════════════════════════════ */
+
+/*
+ * Discreto no repouso, inequívoco na confirmação.
+ *
+ * O botão de abrir NÃO usa a cor de erro: no estado inicial ele é uma opção
+ * legítima, e pintá-lo de vermelho no rodapé de toda tela transformaria um
+ * direito em alarme permanente. A cor de erro entra só no passo em que a
+ * consequência é real — no botão que de fato apaga.
+ */
+.apagar {
+  margin-top: var(--esp-6);
+  padding-top: var(--esp-4);
+  border-top: 1px solid var(--cor-borda);
+}
+
+.apagar__abrir {
+  min-height: var(--alvo-toque);
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.apagar__abrir:hover {
+  color: var(--cor-erro);
+}
+
+.apagar--aberto > [role="alertdialog"] {
+  padding: var(--esp-4);
+  border: 2px solid var(--cor-erro);
+  border-left-width: 4px;
+  border-radius: var(--raio);
+  background: var(--cor-erro-fundo);
+  color: var(--cor-texto);
+}
+
+.apagar__titulo {
+  font-weight: var(--peso-forte);
+  margin-bottom: var(--esp-2);
+}
+
+.apagar__texto {
+  font-size: var(--texto-sm);
+  line-height: var(--altura-linha);
+}
+
+.apagar__erro {
+  margin-top: var(--esp-3);
+  font-size: var(--texto-sm);
+  font-weight: var(--peso-medio);
+  color: var(--cor-erro);
+}
+
+.apagar__acoes {
+  display: flex;
+  gap: var(--esp-3);
+  margin-top: var(--esp-4);
+}
+
+.apagar__acoes button {
+  min-height: var(--alvo-toque);
+  padding: var(--esp-2) var(--esp-5);
+  border-radius: var(--raio);
+  font-weight: var(--peso-medio);
+}
+
+/* Cancelar é o caminho seguro e vem primeiro; fica em superfície neutra. */
+.apagar__acoes button:first-child {
+  border: 1px solid var(--cor-borda-forte);
+  background: var(--cor-superficie-elevada);
+  color: var(--cor-texto);
+}
+
+.apagar__confirmar {
+  background: var(--cor-erro);
+  color: var(--cor-fundo);
+}
+
+/* ═══ Telas largas ════════════════════════════════════════════════════ */
+
+/*
+ * Mobile-first, e não por moda: o planejamento diz que boa parte do público
+ * preenche no celular. Tudo acima funciona numa coluna; a partir daqui a
+ * tela larga ganha preview ao lado do painel, que é onde ela ajuda.
+ */
+@media (min-width: 64rem) {
+  .formulario {
+    max-width: 52rem;
+    padding: var(--esp-6);
+  }
+
+  .preview__documento {
+    aspect-ratio: auto;
+    height: 80vh;
+  }
+}
