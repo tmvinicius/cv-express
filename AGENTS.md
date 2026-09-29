@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar     # build + typecheck + testes — 401 testes devem passar
+pnpm run verificar     # build + typecheck + lint + testes — 623 testes devem passar
 ```
 
 Se isso não passar num repositório limpo, pare e diga. Não construa em cima de
@@ -24,9 +24,27 @@ uma base quebrada.
 antes do typecheck porque os pacotes se importam via `dist/`; um build velho
 gera falhas que parecem erro de tipo e não são.
 
-O `pnpm -r` para no primeiro pacote que falha, e os pacotes seguintes nem
-rodam. Para ver o quadro inteiro de uma vez, use
-`pnpm -r --no-bail run test`.
+**São dois portões, e o de entrega é o segundo:**
+
+| Comando | Cobre | Quando |
+|---|---|---|
+| `pnpm run verificar` | build dos `packages/**`, typecheck, lint, testes | laço de desenvolvimento |
+| `pnpm run verificar:completo` | tudo acima **mais** `tsc` do worker e `next build` do web | antes de entregar e no CI |
+
+A separação existe porque `next build` leva dezenas de segundos e não paga
+esse custo a cada alteração. Mas ele precisa rodar em algum momento: erro de
+Server Component, import de `node:` em código de cliente e falha de prerender
+**só aparecem ali** — e são a classe de erro mais cara, a que só apareceria no
+deploy. O mesmo vale para o `tsc` do worker, cujos testes rodam de `src/` via
+Vitest e não passam pelo build.
+
+Para ver o app no navegador, o passo a passo está em "Rodando localmente", no
+`README.md`. O caminho que funciona hoje é
+`docker compose up -d` (sobe Postgres e worker), `apps/web/.env.local` com
+`DATABASE_URL`, `AI_PROVIDER=mock`, `WORKER_URL` e `WORKER_TOKEN`, e
+`pnpm --filter @cv-express/web dev`. O `WORKER_TOKEN` tem de ser o mesmo dos
+dois lados, e o cabeçalho do worker é `x-worker-token`, não
+`Authorization: Bearer`.
 
 ---
 
@@ -117,45 +135,45 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Aparência do PDF | `packages/templates/classico/cvexpress.cls` |
 | Ordem e presença das seções | `packages/templates/classico/main.tex.hbs` |
 | Rótulos impressos no PDF | `packages/i18n/src/pt-BR.ts` |
-| Currículos de teste (mínimo, completo, hostil) | `packages/templates/src/fixtures.ts` |
 | Sandbox, fila, rotas | `apps/latex-worker/src/` |
+| Currículos de teste (mínimo, completo, hostil) | `packages/templates/src/fixtures.ts` |
 | O que a IA oferece ao resto do projeto | `packages/ai/src/servico.ts` |
 | Regras contra invenção | `packages/ai/src/guardrails.ts` |
 | Provider de IA e variáveis `AI_*` | `packages/ai/src/config.ts` |
-| Tabelas e migração | `packages/db/src/esquema.ts`, `packages/db/migrations/` |
-| Sessões, link mágico, registro de compilações | `packages/db/src/` |
-| Quais etapas existem, validação e progresso | `apps/web/src/formulario/etapas.ts`, `maquina.ts` |
+| Tabelas e migrações | `packages/db/src/esquema.ts`, `packages/db/migrations/`, `migracoes.ts` |
+| Cor, espaçamento, tipografia da **interface** | `apps/web/src/estilos/` |
+| Etapas do formulário, validação por etapa | `apps/web/src/formulario/` |
+| Critério de progresso, estado de cada etapa | `apps/web/src/formulario/maquina.ts` |
+| Avisos de data incoerente (não bloqueantes) | `apps/web/src/formulario/coerencia.ts` |
 | Toda mudança no `CvData` feita pelo formulário | `apps/web/src/formulario/reducer.ts` |
-| Quando e como o autosave dispara | `apps/web/src/formulario/useAutosave.ts` |
-| O que o autosave aceita gravar (rascunho × malformado) | `apps/web/src/acoes/sessao.ts` |
 | Fronteira navegador ↔ servidor (Server Actions) | `apps/web/src/acoes/servidor.ts` |
-| Chamada ao latex-worker | `apps/web/src/acoes/compilar.ts` |
-| Telas de cada etapa | `apps/web/src/componentes/etapas/` |
-| Montagem do formulário | `apps/web/src/componentes/FormularioCliente.tsx` |
-| Preview, painel de seções, aviso de páginas | `apps/web/src/componentes/`, `apps/web/src/preview/` |
+| Sinal de "a IA funciona neste ambiente?" | `packages/ai/src/config.ts`, `apps/web/src/acoes/capacidades.ts` |
+| Texto que a pessoa lê quando a IA falha | `apps/web/src/componentes/mensagensIa.ts` |
+| O que o autosave aceita gravar; chamada ao worker | `apps/web/src/acoes/sessao.ts`, `compilar.ts` |
+| Montagem do formulário na rota | `apps/web/src/componentes/FormularioCliente.tsx` |
+| Quando o PDF é gerado e o que o preview mostra | `apps/web/src/preview/useCompilacao.ts` |
+
+**Sobre a interface:** a aparência vive em `estilos/`, os componentes em
+`componentes/`. Um componente traz estrutura, semântica e `aria-*`; nenhum
+deles decide cor ou espaçamento — é a mesma separação que o `.cls` faz do
+lado do LaTeX. Não introduza Tailwind nem estilo inline: o motivo completo
+está no topo de `estilos/componentes.css`.
+
+Ao mexer numa cor, mude nos **dois** lugares (`paleta.ts` e `tokens.css`) e
+rode `pnpm --filter @cv-express/web exec vitest run src/estilos`. Há um teste
+que reprova a divergência e outro que mede o contraste contra o WCAG AA.
 
 **Regra prática:** se a mudança é de aparência, ela pertence ao `.cls` — o
 arquivo que não contém dado de usuário nem lógica. Se é de formatação de
 valor, pertence a `formatadores.ts`. Nunca ao template.
 
-**Na IA:** o resto do projeto usa só o `CvAiService`. O único ponto fora de
-`packages/ai` que monta o provider é a composição em
-`apps/web/src/acoes/servidor.ts`, via `criarProviderDoAmbiente()`. Nenhum outro
-arquivo menciona modelo, prompt ou provider, e é isso que permite trocar de
-provider sem refatorar. Os guardrails ficam em código, nunca só no prompt:
-apontar `AI_PROVIDER` para um modelo menor não pode enfraquecer a regra de não
-inventar.
-
-**No web:** segredo não atravessa para o navegador. `DATABASE_URL`,
-`WORKER_TOKEN` e a chave da IA são lidos só em Server Actions e páginas de
-servidor. A lógica fica em `acoes/sessao.ts` e `acoes/compilar.ts`, que rodam
-sem o Next e têm testes; `servidor.ts` só resolve configuração e aplica o
-`"use server"`. Mantenha essa divisão: lógica dentro de uma Server Action
-deixa de ser testável sem subir o Next.
-
-Falha de IA e worker fora do ar nunca derrubam o formulário. A pessoa segue com
-o próprio texto e o currículo continua salvo. Não troque esses retornos de
-erro tratados por exceções que cheguem à tela.
+**Sobre as Server Actions:** `DATABASE_URL`, `WORKER_TOKEN` e a chave da IA
+só são lidos no servidor. A lógica fica em `acoes/sessao.ts` e
+`acoes/compilar.ts`, que rodam sem o Next e têm testes; `servidor.ts` só
+resolve configuração e aplica o `"use server"`. Lógica escrita direto numa
+Server Action deixa de ser testável sem subir o Next. Falha de IA e worker
+fora do ar devolvem resultado tratado, nunca exceção que derrube a página: a
+pessoa não pode perder o que preencheu.
 
 ---
 
@@ -217,24 +235,38 @@ falsas contra escape correto.
 
 ### Importar entre pacotes exige `exports` **e** `dist/`
 
-Um pacote só enxerga de outro o que está declarado em `exports` no
-`package.json` e existe no `dist/`. O build exclui `__tests__/`, então nada
-dali pode ser importado de fora.
-
-Foi o que aconteceu com as fixtures: o worker importava
-`@cv-express/templates/fixtures`, mas elas moravam em `__tests__/` e o subpath
-não existia. A suíte do servidor HTTP (18 testes) nunca chegou a carregar.
-Por isso `fixtures.ts` fica em `src/`, com subpath próprio, e não é
-reexportado pelo `index.ts`, para que código de produção não o importe.
-
-Ao criar um subpath: declare-o em `exports`, confira que o arquivo sai no
-`dist/` e rode `pnpm run verificar`.
+Um pacote só enxerga de outro o que está declarado em `exports` e existe no
+`dist/`. O build exclui `__tests__/`, então nada dali pode ser importado de
+fora — por isso `fixtures.ts` fica em `src/`, com subpath próprio.
 
 O `apps/web` não é exceção. O `transpilePackages` do `next.config.ts` faz o
 Next compilar os pacotes, mas a resolução continua passando pelo `exports`,
-que aponta para o `dist/`. Sem `pnpm run build`, o `next dev` e o `next build`
-falham com `Can't resolve '@cv-express/schema'`. O comentário no
-`next.config.ts` diz o contrário e está errado.
+que aponta para o `dist/`. Sem `pnpm run build`, o `next dev` falha com
+`Can't resolve '@cv-express/schema'`.
+
+### `%` em URL dentro do argumento de uma macro vira comentário
+
+O `\href` aceita `%` cru só quando lê a URL diretamente. Aqui a URL chega
+dentro de `\cvLink{...}`, que está dentro de `\cvContato{...}`: quando o LaTeX
+lê esse argumento, `%` já vale como comentário, engole o resto da linha com as
+chaves de fechamento, e a compilação morre com "File ended while scanning use
+of \cvContato". Por isso o `escapeLatexUrl` emite `\%5F`, e não `%5F`; o link
+no PDF sai com `%` normal. O teste de ataques exige que nenhum `%` saia sem
+contrabarra.
+
+### Fonte pelo nome do arquivo, nunca pelo nome da família
+
+`\setmainfont{Latin Modern Roman}` pede a fonte ao fontconfig do sistema:
+falha onde ela não está instalada e faz o Tectonic varrer as fontes da
+máquina, o que torna o PDF dependente do ambiente. O `cvexpress.cls` carrega
+`lmroman10`/`lmsans10` pelo arquivo `.otf`, que vem no bundle do Tectonic. Se
+trocar de fonte, faça o mesmo — e reaqueça o cache (ver README).
+
+### `.env` do app web mora em `apps/web/`
+
+O Next só lê `.env*` do diretório do próprio app. Um `.env` na raiz do
+monorepo é ignorado em silêncio, e o sintoma é
+`DATABASE_URL não configurada.` com o arquivo "claramente ali".
 
 ---
 
@@ -284,56 +316,97 @@ não vale é divergir em silêncio.
 
 Não invente que existe:
 
-O `apps/web` existe e roda: as 6 etapas de dados, o autosave e as sugestões de
-IA estão ligados à rota `/cv/[id]`. O que ainda falta:
+`packages/ai`, `packages/db` e `apps/web` **existem**. A rota `/cv/[id]` desenha
+as 6 etapas de dados (pessoal, objetivo, experiências, formação, idiomas,
+habilidades), com autosave e sugestões de IA. Depois delas, "gerando" chama o
+worker pela `acaoCompilar` e segue sozinha para "preview", que mostra o PDF, o
+download, o aviso de páginas e o painel de seções. A orquestração está em
+`FormularioCliente.tsx` e `preview/useCompilacao.ts`. O que ainda não existe:
 
-- **O PDF na interface.** `Preview`, `PainelSecoes` e `AvisoPaginas` existem e
-  têm testes, mas nenhuma rota os renderiza. A Server Action `acaoCompilar`
-  existe e ninguém a chama.
-- **Conteúdo das etapas `boas-vindas`, `gerando` e `preview`.** Estão em
-  `ETAPAS`, mas o `FormularioCliente` só desenha as 6 etapas de dados; nessas
-  três aparecem só a barra de progresso e os botões.
-- **O botão "apagar meus dados".** A ação `acaoApagarTudo` existe; nenhum
-  componente a chama.
-- **Envio do e-mail do link mágico.** `packages/db` gera o token, guarda só o
-  hash e faz o resgate de uso único. Nada envia o e-mail, e o web ainda não
-  oferece o link.
-- **Script de migração e `.env.example`.** A migração se aplica à mão com
-  `psql`; as variáveis de ambiente estão listadas no `README.md`.
+- **Envio do link mágico por e-mail.** `packages/db` tem toda a lógica —
+  token, hash, uso único, validade. Falta o disparo via Resend, a rota de
+  resgate e a tela que ofereça o link. É o único caminho de recuperação de
+  sessão que existe no plano, e hoje a URL é a única chave: quem fecha o
+  navegador ou troca de aparelho perde o currículo.
+- **Execução da retenção de 30 dias.** `expurgarExpiradas` existe e só roda em
+  teste; nada a agenda. `buscarSessao` apenas ignora linhas vencidas, não as
+  apaga.
+- **`compile_jobs` ligada.** A tabela e `packages/db/src/jobs.ts` estão
+  prontos e produção não os chama; `concluirJob` exige um `pdfUrl` que o fluxo
+  atual (PDF em base64 no corpo) não tem como preencher.
+- **Sobreposição de regiões clicáveis no PDF.** A origem das coordenadas já
+  foi calibrada (seção 8); o que falta é o ancoramento vertical — o `.aux` dá
+  um ponto, e desenhar uma região exige uma altura. O plano B, o painel
+  lateral de seções, está na rota e é o caminho de edição.
+- **`.env.example` e script de migração.** As variáveis estão na tabela do
+  `README.md`; a migração roda pelo `initdb` do compose ou por
+  `aplicarMigracoes()` de `@cv-express/db`.
+- **Segundo template.** Só existe o `classico`.
 
 ## 8. A dívida que você precisa saber
 
-**A imagem Docker do worker não constrói.** Tentar construí-la expôs dois
-defeitos no `apps/latex-worker/Dockerfile`, escrito antes de `packages/ai` e
-`packages/db` existirem:
+**A imagem Docker do worker constrói e roda.** `docker compose up -d` sobe
+Postgres e worker, os dois `healthy`, e o worker compila as três fixtures —
+inclusive a hostil — sob `read_only`, `cap_drop: ALL`, `no-new-privileges`,
+`pids_limit` e teto de memória.
 
-- a imagem base `ghcr.io/tectonic-typesetting/tectonic:latest` responde 403
-  ao pull anônimo;
-- o estágio `build` copia só os `package.json` de schema, i18n, templates e
-  worker antes do `pnpm install`, mas depois compila todo `packages/**`, e
-  `packages/db` quebra sem `drizzle-orm` e `pg`.
+Ela já não construiu, e vale saber quais eram os cinco defeitos, porque três
+deles são armadilhas que voltam sozinhas se alguém mexer no `Dockerfile`:
 
-**Nada de LaTeX foi compilado de verdade.** Sem imagem e sem Tectonic
-instalado, continuam sem verificação:
+1. **Imagem base impossível de puxar.** `ghcr.io/tectonic-typesetting/tectonic`
+   responde `denied` ao pull anônimo. Hoje o Tectonic vem do tarball de
+   release do GitHub, fixado por `sha256` — e o build musl é estaticamente
+   linkado, o que dispensou seis pacotes `apt` de libs de fonte na imagem
+   final.
+2. **Install e build discordando.** O estágio copiava quatro `package.json` e
+   mandava compilar todo `packages/**`, incluindo `ai` e `db`, cujas
+   dependências nunca eram instaladas. Hoje o build é restrito ao subgrafo do
+   worker (`--filter "@cv-express/latex-worker..."`), que é schema, i18n e
+   templates. **Não amplie o install para consertar isso** — `ai` e `db` não
+   têm o que fazer numa imagem que só compila LaTeX.
+3. **`node_modules` do worker não copiado.** O pnpm não achata dependências na
+   raiz: cada projeto tem o seu `node_modules` com symlinks. Sem copiar
+   `apps/latex-worker/node_modules`, a imagem constrói, sobe e morre com
+   `Cannot find package 'fastify'`.
+4. **`pnpm prune --prod` destrói os links.** Ele apaga o `node_modules` de
+   cada projeto e deixa só o store `.pnpm`, com o mesmo sintoma do item 3. Use
+   `pnpm install --prod`, que refaz os links. E exporte `CI=true`, senão o
+   pnpm aborta pedindo confirmação de TTY.
+5. **`TMPDIR` debaixo do tmpfs.** A imagem criava `/tmp/cvexpress` e apontava
+   `TMPDIR` para lá, mas o contêiner monta um tmpfs sobre `/tmp` inteiro, que
+   esconde o diretório da imagem — `ENOENT ... mkdtemp`. Hoje `TMPDIR=/tmp`.
 
-- a compilação `.tex → PDF`
-- o `cvexpress.cls`
-- a macro `\cvCampo` e o formato real do `.aux`
-- a origem das coordenadas em `aux.ts`
+Faltou também um `.dockerignore`: sem ele, `COPY packages/` levava o
+`node_modules` do host por cima da instalação do contêiner — uma floresta de
+symlinks apontando para caminhos da máquina de origem.
 
-Tudo de `CvData` até `.tex` **está** testado, assim como o contrato HTTP, a
-fila, o cache e o parse do `.aux` contra arquivo sintético.
+**O LaTeX já foi compilado de verdade**, com o Tectonic 0.15.0, dentro e fora
+do contêiner. Ficaram verificados:
 
-Se você for a primeira pessoa a compilar, o roteiro está em
-`apps/latex-worker/README.md`. E se algo ali estiver errado, **corrija o
-comentário junto com o código** — os avisos de "não verificado" devem sumir
-quando deixarem de ser verdade.
+- a compilação `.tex → PDF` das três fixtures, inclusive a hostil, cujo
+  conteúdo sai impresso como texto;
+- o `cvexpress.cls`, que precisou de duas correções para compilar (seção 4);
+- a macro `\cvCampo` e o formato real do `.aux`: três entradas por campo, e o
+  `aux.ts` extrai as posições do arquivo real.
 
-**Nenhum provider de IA real é chamado nos testes.** A suíte de contrato de
-`packages/ai` roda só contra o `MockAdapter`, em três modos de suporte a JSON.
-Os adapters Anthropic e OpenAI-compatível não são exercitados contra uma API
-de verdade. O `contrato.test.ts` diz que o roteiro para isso está no README do
-pacote, mas esse README ainda não existe.
+A **origem das coordenadas** em `aux.ts` foi calibrada (Tectonic 0.17.0,
+fixture `completa`): a posição relatada para `pessoal.nome` cai exatamente
+sobre as margens declaradas pela classe — x = 51,024 bp = 1,8 cm e
+841,89 − y = 45,355 bp = 1,6 cm. Origem no canto inferior esquerdo, y para
+cima, conversão sp→bp correta.
+
+Continua em aberto o **ancoramento vertical**: o y gravado é o ponto de
+referência corrente, não o topo nem a base do texto, então desenhar um
+retângulo clicável ainda exige uma altura que o `.aux` não fornece. Só importa
+quando o clique direto no PDF existir; o roteiro está em
+`apps/latex-worker/README.md`.
+
+Se algo ali estiver errado, **corrija o comentário junto com o código** — os
+avisos de "não verificado" devem sumir quando deixarem de ser verdade.
+
+**Nenhum provider de IA real foi chamado.** A suíte de contrato de
+`packages/ai` roda só contra o `MockAdapter`. Os adapters Anthropic e
+OpenAI-compatível nunca falaram com uma API de verdade.
 
 `packages/db` não tem essa dívida: os testes aplicam a migração de produção no
-PGlite, que é o próprio Postgres, e exercitam o SQL real.
+PGlite, que é o próprio Postgres, e o Postgres do compose já subiu com ela.

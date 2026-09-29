@@ -140,7 +140,14 @@ describe("ida e volta do currículo", () => {
     await salvarEtapa(db, sessao.id, cv);
     const lida = await carregarSessao(db, sessao.id);
 
-    expect(lida?.data).toEqual(cv);
+    // `atualizadoEm` sai de fora de propósito: a gravação REESCREVE o carimbo
+    // (é o que impede o campo de congelar no valor da criação). O que este
+    // teste prova é o conteúdo — em especial a acentuação atravessando o
+    // JSONB sem se perder.
+    const { atualizadoEm: _salvo, ...conteudoEsperado } = cv;
+    const { atualizadoEm: _lido, ...conteudoLido } = lida!.data;
+    expect(conteudoLido).toEqual(conteudoEsperado);
+    expect(lida?.data.pessoal.nome).toBe("João Conceição");
   });
 });
 
@@ -161,5 +168,26 @@ describe("apagar meus dados agora", () => {
 
     expect(await apagarTudo(db, sessao.id)).toBe(true);
     expect(await carregarSessao(db, sessao.id)).toBeNull();
+  });
+});
+
+describe("o carimbo de atualização não congela", () => {
+  /**
+   * O defeito que este teste impede: `cv.atualizadoEm` ficar para sempre no
+   * valor da criação da sessão.
+   *
+   * `salvarCv` atualizava a COLUNA, mas gravava o JSON como veio do cliente, e
+   * o redutor nunca mexe nesse campo. Ficavam duas fontes para o mesmo fato,
+   * com a do documento permanentemente errada — e é a que a tela leria.
+   */
+  it("grava o horário da gravação dentro do documento", async () => {
+    const sessao = await iniciarSessao(db);
+
+    const depois = new Date(Date.parse(sessao.data.atualizadoEm) + 60_000);
+    await salvarEtapa(db, sessao.id, sessao.data, depois);
+
+    const lida = await carregarSessao(db, sessao.id);
+    expect(lida?.data.atualizadoEm).toBe(depois.toISOString());
+    expect(lida?.data.atualizadoEm).not.toBe(sessao.data.atualizadoEm);
   });
 });

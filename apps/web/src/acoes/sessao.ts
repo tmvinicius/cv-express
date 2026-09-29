@@ -66,7 +66,28 @@ export async function salvarEtapa(
     }
   }
 
-  const gravou = await salvarCv(db, sessionId, cv, agora);
+  /**
+   * O carimbo do JSON acompanha a coluna.
+   *
+   * `salvarCv` sempre atualizou a COLUNA `atualizado_em`, mas gravava `data`
+   * exatamente como veio do cliente — e o redutor nunca toca
+   * `cv.atualizadoEm`. O campo dentro do JSON ficava para sempre no valor que
+   * `novoCv` escreveu na criação da sessão: duas fontes para o mesmo fato,
+   * uma delas permanentemente errada, e é o tipo de dado em que alguém
+   * confia ("quando foi a última edição?") e erra.
+   *
+   * Isto também faz o cuidado de `useAutosave.assinaturaDoConteudo` deixar de
+   * ser ficção: o carimbo agora MUDA a cada gravação, então excluí-lo da
+   * assinatura passou a ser necessário de verdade para não realimentar o laço
+   * de reagendamento que o comentário de lá descreve. Não remova aquela
+   * exclusão.
+   */
+  const gravou = await salvarCv(
+    db,
+    sessionId,
+    { ...cv, atualizadoEm: agora.toISOString() },
+    agora,
+  );
   if (!gravou) return { ok: false, motivo: "sessao_ausente" };
 
   return { ok: true, salvoEm: agora.toISOString() };

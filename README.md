@@ -4,9 +4,11 @@ Gerador de currículos: o usuário preenche um formulário em etapas, uma IA
 organiza o texto das experiências sem inventar nada, e o sistema devolve um PDF
 bonito — composto em LaTeX, sem que o usuário jamais veja LaTeX.
 
-> **Estado: em desenvolvimento.** O formulário web já roda, salva sozinho e
-> pede sugestões à IA. O PDF ainda não aparece na interface: o preview existe
-> como componente, mas nenhuma rota o exibe. Veja
+> **Estado: em desenvolvimento.** O fluxo roda de ponta a ponta: seis etapas,
+> salvamento automático no Postgres, sugestões de IA, e o PDF gerado pelo
+> worker — em contêiner, com a sandbox ligada — aparece na última etapa, com
+> download. O que falta: o ancoramento vertical das coordenadas de clique e
+> uma chamada real a um provider de IA. Veja
 > [Situação atual](#situação-atual).
 
 ## O problema
@@ -22,22 +24,19 @@ exigência técnica.
 ## Como funciona
 
 ```
-Formulário (6 etapas de dados)
-   ↓  autosave com debounce, via Server Action
+Formulário (6 etapas de dados)                       ✅ roda
+   ↓  autosave com debounce, via Server Action        ✅ roda
 CvData ......................... JSON canônico, validado por Zod, salvo no Postgres
-   ↓  polimento opcional por IA (experiências e habilidades), aprovado pelo usuário
+   ↓  polimento opcional por IA, aprovado pelo usuário ✅ roda (com AI_PROVIDER=mock)
 CvData enriquecido
-   ↓  ViewModel + motor de templates
+   ↓  ViewModel + motor de templates                  ✅ roda
 arquivo .tex ................... todo dado do usuário escapado
-   ↓  Tectonic, em contêiner isolado (latex-worker)
+   ↓  Tectonic (latex-worker)                         ✅ roda fora do Docker; imagem ❌
 PDF + nº de páginas + mapa de posições
    ↓
-Preview no navegador  →  clique numa seção  →  edita  →  recompila
+Preview no navegador  →  painel de seções  →  edita  →  recompila   ✅ roda
+                      →  clique direto no PDF                        ❌ não existe
 ```
-
-Da primeira linha até o `CvData` enriquecido, o fluxo está ligado e roda. Do
-`.tex` para baixo, as peças existem e têm testes, mas a interface ainda não
-chama o worker.
 
 O **`CvData` é a única fonte de verdade**. O `.tex` e o `.pdf` são artefatos
 derivados, descartáveis e sempre reconstruíveis. É isso que torna a edição
@@ -46,36 +45,40 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 
 ## Tecnologias
 
-| Camada         | Escolha                               | Por quê                                                           |
-| -------------- | ------------------------------------- | ----------------------------------------------------------------- |
-| Linguagem      | TypeScript 5.9, modo estrito          | `noUncheckedIndexedAccess` e `exactOptionalPropertyTypes` ligados |
-| Runtime        | Node.js 22                            | Versão fixada em `.nvmrc`                                         |
-| Monorepo       | pnpm workspaces 10                    | Dependências estritas: um pacote só enxerga o que declarou        |
-| Validação      | Zod 3                                 | Um schema só, usado no cliente, no servidor e na borda            |
-| Web            | Next.js 15 (App Router) + React 19    | Server Actions mantêm banco, token e chave de IA no servidor      |
-| Banco          | Postgres + Drizzle ORM 0.38           | Migração em SQL escrito à mão, aplicada igual em produção e teste |
-| Composição     | LaTeX via Tectonic                    | Engine moderna, ~200 MB, sem instalar TeX Live inteiro            |
-| Worker         | Fastify 5                             |                                                                   |
-| IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
-| Testes         | Vitest 2, Testing Library, PGlite     | 401 testes; o banco de teste é Postgres de verdade, em memória    |
-| Ids            | nanoid                                | Ids estáveis por item de lista                                    |
+| Camada | Escolha | Por quê |
+|---|---|---|
+| Linguagem | TypeScript 5.9, modo estrito | `noUncheckedIndexedAccess` e `exactOptionalPropertyTypes` ligados |
+| Runtime | Node.js 22 | Versão fixada em `.nvmrc` |
+| Monorepo | pnpm workspaces 10 | Dependências estritas: um pacote só enxerga o que declarou |
+| Validação | Zod 3 | Um schema só, usado no cliente, no servidor e na borda |
+| Composição | LaTeX via Tectonic | Engine moderna, ~200 MB, sem instalar TeX Live inteiro |
+| Servidor | Fastify 5 | |
+| Interface | Next.js 15 (App Router) + React 19 | Server Actions mantêm banco, token e chave de IA no servidor |
+| Estilo | CSS com tokens | Sem Tailwind — o motivo está em `apps/web/src/estilos/componentes.css` |
+| Testes | Vitest 2 + Testing Library | 623 testes |
+| Ids | nanoid | Ids estáveis por item de lista |
+| IA | Claude API, atrás de porta própria | Também há adapter OpenAI-compatível e mock; troca por variável de ambiente |
+| Banco | Postgres + Drizzle | Testado contra Postgres real via PGlite |
 
-Sem Handlebars, sem LangChain. Cada dependência ausente foi uma decisão, não um
-esquecimento — os motivos estão nos comentários do código e no `AGENTS.md`.
+Sem Handlebars e sem LangChain. Cada dependência ausente foi uma
+decisão, não um esquecimento — os motivos estão nos comentários do código e no
+`AGENTS.md`.
 
 ## Estrutura
 
 ```
 cv-express/
 ├── apps/
-│   ├── web/                Formulário, autosave, Server Actions (Next.js)
-│   └── latex-worker/       Serviço de compilação (Fastify + Tectonic)
+│   ├── latex-worker/       Serviço de compilação (Fastify + Tectonic)
+│   └── web/                Next.js: formulário, autosave, Server Actions
+│       └── src/estilos/    Design system: tokens, paleta, contraste
 ├── packages/
 │   ├── schema/             CvData, limites, FieldId, contrato HTTP
 │   ├── templates/          Escape de LaTeX, motor, template "clássico", fixtures
-│   ├── i18n/               Rótulos (pt-BR)
-│   ├── ai/                 Camada de IA agnóstica de provider, com guardrails
-│   └── db/                 Sessões, link mágico, registro de compilações
+│   ├── ai/                 Camada de IA, agnóstica de provider
+│   ├── db/                 Sessões anônimas, link mágico, jobs, migrações
+│   └── i18n/               Rótulos do documento (pt-BR)
+├── docker-compose.yml      Postgres (e o worker, quando a imagem construir)
 └── AGENTS.md               Guia para quem for contribuir com IA
 ```
 
@@ -90,9 +93,11 @@ Cada pacote tem seu próprio `src/`, `package.json` e testes. Não é duplicaç�
 
 - **Node.js 22** ou superior (`.nvmrc` no repositório)
 - **pnpm 10** — `corepack enable` já resolve
-- **Docker** — para subir o Postgres. Os testes não precisam dele: usam PGlite
+- **Docker** — para o Postgres. Os testes não precisam dele: usam PGlite
 
-### Instalação
+### Passo a passo
+
+**1. Instalar as dependências.**
 
 ```bash
 git clone https://github.com/tmvinicius/cv-express.git
@@ -100,152 +105,296 @@ cd cv-express
 pnpm install
 ```
 
-### Verificando que está tudo de pé
+**2. Verificar e gerar os `dist/`.**
 
 ```bash
 pnpm run verificar
 ```
 
-Isso roda build, typecheck e testes, nessa ordem. O esperado:
+Roda build, typecheck e testes, nessa ordem. O build não é opcional: o app web
+resolve os pacotes do workspace pelo `dist/` e, sem ele, falha com
+`Can't resolve '@cv-express/schema'`. Rode `pnpm run build` de novo sempre que
+mexer em `packages/`.
+
+O esperado:
 
 ```
 packages/schema        38 testes
-packages/templates     95 testes
-packages/ai            64 testes
+packages/templates     99 testes
+packages/ai            77 testes
 packages/db            35 testes
-apps/latex-worker      41 testes
-apps/web              128 testes
+apps/latex-worker      51 testes
+apps/web              323 testes
 ─────────────────────────────────
-total                 401 testes
+total                 623 testes
 ```
 
-O build vem antes porque os pacotes se importam via `dist/` — um build velho
-produz falhas confusas.
-
-### Subindo o app web
-
-**1. Postgres.** Qualquer Postgres serve; o jeito mais curto é um contêiner
-descartável:
+**3. Subir o Postgres.**
 
 ```bash
-docker run -d --name cvexpress-pg -p 5432:5432 \
-  -e POSTGRES_USER=cvexpress \
-  -e POSTGRES_PASSWORD=cvexpress \
-  -e POSTGRES_DB=cvexpress \
-  postgres:16
+docker compose up -d postgres
 ```
 
-**2. Migração.** Não há script: o arquivo é SQL puro e se aplica direto.
+Ou `docker compose up -d` sem nomear serviço, que sobe o Postgres **e** o
+worker do passo 4 de uma vez. Isso passou a funcionar quando a imagem do
+worker voltou a construir; antes, a falha dela abortava a subida inteira e
+você ficava sem nem o banco.
+
+A migração roda sozinha na primeira subida, quando o volume está vazio: o
+compose monta `packages/db/migrations/` no `docker-entrypoint-initdb.d`. Para
+conferir:
 
 ```bash
-docker exec -i cvexpress-pg psql -U cvexpress -d cvexpress \
-  < packages/db/migrations/0000_inicial.sql
+docker compose exec postgres psql -U cvexpress -d cvexpress -c '\dt'
+# compile_jobs, cv_sessions, magic_links
 ```
 
-**3. Build dos pacotes.** O Next resolve os pacotes do workspace pelo `dist/`;
-sem ele, falha com `Can't resolve '@cv-express/schema'`. O `verificar` já
-faz isso — rode de novo só se mexer em `packages/`.
+Se a porta 5432 já estiver ocupada por outro contêiner (um `cvexpress-pg`
+criado à mão, por exemplo), remova-o antes: `docker rm -f cvexpress-pg`.
+
+**4. Subir o worker de LaTeX.** É ele que compila o PDF.
 
 ```bash
-pnpm run build
+docker compose up -d latex-worker
 ```
 
-**4. O app.**
+A primeira construção leva alguns minutos: ela baixa o Tectonic, compila um
+documento de aquecimento e guarda o cache de pacotes LaTeX **dentro da
+imagem** — o contêiner roda sem baixar nada (`--only-cached`), então o cache
+precisa chegar pronto. As seguintes usam o cache do Docker e levam segundos.
+
+Confira:
 
 ```bash
-cd apps/web
-DATABASE_URL=postgres://cvexpress:cvexpress@localhost:5432/cvexpress \
-AI_PROVIDER=mock \
-pnpm run dev
+docker compose ps          # latex-worker ... Up (healthy)
+curl localhost:8080/saude  # {"estado":"ok","ativas":0,"aguardando":0,"cache":0}
 ```
 
-Abra `http://localhost:3000`. A página inicial cria uma sessão anônima e
-redireciona para `/cv/<id>`, onde começa o formulário.
+O `healthy` só aparece depois do `start_period` de 20s. Se ficar em
+`starting` por mais que isso, `docker compose logs latex-worker` diz o motivo.
 
-`AI_PROVIDER=mock` faz os botões de sugestão funcionarem sem chave de API.
-Para usar a IA de verdade, veja as variáveis abaixo.
+Este é o caminho recomendado: é o único que traz a sandbox — usuário
+não-root, filesystem somente leitura, `cap_drop: ALL`, `no-new-privileges`,
+limite de memória, CPU e processos. Cada opção e o que ela defende estão
+comentadas no `docker-compose.yml`.
+
+<details>
+<summary><strong>Alternativa: worker direto no Node</strong> (sem sandbox — só para depurar)</summary>
+
+Útil quando você está mexendo no código do worker e não quer reconstruir a
+imagem a cada alteração. **Não use para expor o serviço:** aqui não há
+nenhuma das proteções do contêiner, e LaTeX é Turing-completo.
+
+Instale o Tectonic (Linux x86_64; para outros sistemas, pegue o binário na
+[página de releases](https://github.com/tectonic-typesetting/tectonic/releases)):
+
+```bash
+mkdir -p ~/.local/bin
+curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz" \
+  | tar xz -C ~/.local/bin
+tectonic --version          # ~/.local/bin precisa estar no PATH
+```
+
+Aqueça o cache uma vez, com rede, a partir da raiz do repositório:
+
+```bash
+export TECTONIC_CACHE_DIR="$HOME/.cache/cvexpress-tectonic"
+mkdir -p /tmp/cvexpress-aquecimento
+cp apps/latex-worker/aquecimento.tex packages/templates/classico/cvexpress.cls /tmp/cvexpress-aquecimento/
+(cd /tmp/cvexpress-aquecimento && tectonic aquecimento.tex)
+```
+
+Sem esse passo, toda compilação falha com
+`failed to open input file "tectonic-format-latex.tex"`. Refaça-o se o
+`cvexpress.cls` passar a usar um pacote novo.
+
+Depois, num terminal separado:
+
+```bash
+pnpm --filter @cv-express/latex-worker build
+cd apps/latex-worker
+PORT=8080 WORKER_TOKEN=token-local-nao-use-em-producao \
+TECTONIC_CACHE_DIR="$HOME/.cache/cvexpress-tectonic" \
+node dist/index.js
+```
+
+</details>
+
+**5. Chamar o worker direto (opcional), para conferir antes de abrir o app.**
+
+```bash
+curl -s -X POST localhost:8080/compilar \
+  -H 'content-type: application/json' \
+  -H 'x-worker-token: token-local-nao-use-em-producao' \
+  -d '{"templateId":"classico","cv":{ ... }}' | head -c 200
+```
+
+O cabeçalho é `x-worker-token`, **não** `Authorization: Bearer` — um `Bearer`
+volta `401 Não autorizado`. Um `CvData` completo para colar está em
+`apps/latex-worker/README.md`.
+
+**6. Configurar o app web.** Crie `apps/web/.env.local`:
+
+```bash
+DATABASE_URL=postgres://cvexpress:dev@localhost:5432/cvexpress
+AI_PROVIDER=mock
+WORKER_URL=http://localhost:8080
+WORKER_TOKEN=token-local
+```
+
+O arquivo fica em `apps/web/`, não na raiz: o Next só lê `.env*` do próprio
+diretório. `AI_PROVIDER=mock` precisa estar explícito — o padrão no código é
+`anthropic`, que exige chave. O `WORKER_TOKEN` tem de ser o mesmo do passo 5.
+
+**7. Subir o app web.**
+
+```bash
+pnpm --filter @cv-express/web dev
+```
+
+Abra `http://localhost:3000`. A página inicial cria uma sessão anônima no banco
+e redireciona para `/cv/<id>`, onde começa o formulário. A etapa fica na URL
+(`?etapa=pessoal`, `?etapa=experiencias`...), então recarregar e voltar pelo
+navegador não perdem nada.
+
+Depois de "Habilidades", o formulário passa por "Gerando", que chama o
+worker, e segue sozinho para "Seu currículo": o PDF na tela, o botão
+"Baixar currículo" e o painel de seções para voltar a editar. Sem o worker
+no ar, essa etapa mostra "O gerador de PDF não está disponível agora" e um
+botão para tentar de novo — o currículo continua salvo.
+
+**8. Parar.**
+
+```bash
+docker compose down        # mantém os dados no volume postgres-dados
+docker compose down -v     # apaga o volume; a migração roda de novo na próxima subida
+```
 
 ### Variáveis de ambiente do app web
 
-Não há `.env.example`; estas são todas as que o código lê.
+Não há `.env.example`; estas são todas as que o app web lê.
 
-| Variável            | Obrigatória | Para quê                                                        |
-| ------------------- | ----------- | --------------------------------------------------------------- |
-| `DATABASE_URL`      | sim         | Conexão com o Postgres. Sem ela, nenhuma página abre            |
-| `AI_PROVIDER`       | não         | `anthropic` (padrão), `openai-compativel` ou `mock`             |
-| `ANTHROPIC_API_KEY` | com `anthropic` | Lida pelo SDK quando `AI_API_KEY` não é informada           |
-| `AI_MODEL`          | com `openai-compativel` | Id do modelo. Com `anthropic`, o padrão é `claude-opus-5` |
-| `AI_BASE_URL`       | com `openai-compativel` | Ex.: `http://localhost:11434/v1` (Ollama)           |
-| `AI_API_KEY`        | não         | Chave explícita; opcional em modelo local                       |
-| `AI_SUPORTE_JSON`   | não         | `nativo` (padrão), `modo_json` ou `nenhum` — só `openai-compativel` |
-| `WORKER_URL`        | não         | Endereço do latex-worker. Ainda sem efeito: a interface não compila |
-| `WORKER_TOKEN`      | não         | Token compartilhado com o worker. Idem                          |
+| Variável | Obrigatória | Para quê |
+|---|---|---|
+| `DATABASE_URL` | sim | Conexão com o Postgres. Sem ela, nenhuma página abre |
+| `AI_PROVIDER` | não | `anthropic` (padrão), `openai-compativel` ou `mock` |
+| `ANTHROPIC_API_KEY` | com `anthropic` | Lida pelo SDK quando `AI_API_KEY` não é informada |
+| `AI_MODEL` | com `openai-compativel` | Id do modelo. Com `anthropic`, o padrão é `claude-opus-5` |
+| `AI_BASE_URL` | com `openai-compativel` | Ex.: `http://localhost:11434/v1` (Ollama) |
+| `AI_API_KEY` | não | Chave explícita; opcional em modelo local |
+| `AI_SUPORTE_JSON` | não | `nativo` (padrão), `modo_json` ou `nenhum` — só `openai-compativel` |
+| `WORKER_URL` | para gerar o PDF | Endereço do latex-worker, ex.: `http://localhost:8080` |
+| `WORKER_TOKEN` | para gerar o PDF | Token compartilhado com o worker; precisa bater com o dele |
 
-Sem chave configurada, pedir sugestão à IA falha — e o formulário segue com o
-texto que a pessoa escreveu. É o comportamento pretendido: a IA nunca bloqueia
-o fluxo.
+Sem IA configurada, pedir sugestão falha e o formulário segue com o texto que
+a pessoa escreveu. É o comportamento pretendido: a IA nunca bloqueia o fluxo.
 
 ### Comandos
 
-| Comando                                          | O que faz                                                |
-| ------------------------------------------------ | -------------------------------------------------------- |
-| `pnpm run verificar`                             | Build + typecheck + testes. É o portão antes de commitar |
-| `pnpm run build`                                 | Compila os pacotes de `packages/`                        |
-| `pnpm run test`                                  | Só os testes (para no primeiro pacote que falhar)        |
-| `pnpm -r --no-bail run test`                     | Todos os testes, mesmo com falha no meio                 |
-| `pnpm run typecheck`                             | Só a checagem de tipos (inclui os arquivos de teste)     |
-| `pnpm --filter @cv-express/web dev`              | App web em modo desenvolvimento                          |
-| `pnpm --filter @cv-express/templates test`       | Testes de um pacote só                                   |
-| `pnpm --filter @cv-express/templates test:watch` | Modo watch                                               |
+| Comando | O que faz |
+|---|---|
+| `pnpm run verificar` | Build + typecheck + testes. É o portão antes de commitar |
+| `pnpm run build` | Compila os pacotes de `packages/` |
+| `pnpm run test` | Só os testes (para no primeiro pacote que falhar) |
+| `pnpm -r --no-bail run test` | Todos os testes, mesmo com falha no meio |
+| `pnpm run typecheck` | Só a checagem de tipos (inclui os arquivos de teste) |
+| `pnpm --filter @cv-express/web dev` | App web em modo desenvolvimento |
+| `pnpm --filter @cv-express/templates test` | Testes de um pacote só |
+| `pnpm --filter @cv-express/templates test:watch` | Modo watch |
+
+### Design system e acessibilidade
+
+A paleta vive em `apps/web/src/estilos/paleta.ts` como **dado**, não só como
+CSS, para que os testes possam lê-la:
+
+```bash
+pnpm --filter @cv-express/web exec vitest run src/estilos
+```
+
+Isso mede os 18 pares de cores em uso contra o WCAG 2.1 AA, nos dois temas, e
+imprime a tabela de razões. **A build reprova se um par cair abaixo do
+mínimo** — foi assim que a cor de borda original, que parecia certa, foi
+pega em 2,73:1 e escurecida.
+
+Um segundo teste compara `tokens.css` com `paleta.ts` valor a valor. A
+duplicação entre os dois é intencional (o navegador precisa de variáveis, o
+teste precisa de dado), e esse teste é o que impede que divirjam em
+silêncio.
+
+### Vendo o `.tex` gerado
+
+O caminho `CvData → .tex` não precisa de LaTeX nenhum. Os snapshots em
+`packages/templates/src/__tests__/__snapshots__/gerar.test.ts.snap` guardam o
+`.tex` esperado para as três fixtures — mínima, completa e hostil.
+
+A fixture hostil tem payloads de injeção em todos os campos de texto, e o
+snapshot dela mostra o escape em ação: `\input{/etc/passwd}` sai como
+`\textbackslash{}input\{/etc/passwd\}`.
 
 ### Compilando um PDF de verdade
 
-> ⚠️ **A imagem Docker do worker não constrói hoje.** O `Dockerfile` foi
-> escrito antes de `packages/ai` e `packages/db` existirem, e tem dois
-> defeitos conhecidos: a imagem base `ghcr.io/tectonic-typesetting/tectonic`
-> não é baixável anonimamente (403), e o estágio de build compila
-> `packages/db` sem instalar as dependências dele. Detalhes e o roteiro de
-> conferência estão em [`apps/latex-worker/README.md`](./apps/latex-worker/README.md).
+O passo 4 já sobe um worker que gera PDF, **dentro do contêiner e com a
+sandbox ligada**. Verificado com as três fixtures (mínima, completa e
+hostil): PDF de uma página, acentuação correta, links funcionando e as
+âncoras de posição no `.aux`.
 
-Enquanto isso, o worker roda direto no Node. Ele sobe e responde `/saude`;
-para compilar PDF precisa do binário `tectonic` no `PATH` (ou em
-`TECTONIC_BIN`):
+A fixture hostil sai com `\input{/etc/passwd}` e `\write18{...}` impressos
+como texto, e não executados. Dá para conferir você mesmo — é o melhor teste
+de fumaça que existe aqui:
 
 ```bash
-cd apps/latex-worker
-pnpm run build
-PORT=8080 WORKER_TOKEN=token-local node dist/index.js
-curl localhost:8080/saude
+docker compose up -d latex-worker
+# monte o payload com a fixture hostil e chame /compilar;
+# o receituário está em apps/latex-worker/README.md
 ```
 
-Sem Tectonic, `/compilar` responde 500 `FALHA_LATEX` — e o log do LaTeX fica
-no servidor, como deve.
+O texto sai no PDF como `\input{/etc/passwd}` literal. Nenhum arquivo do
+servidor é lido: o escape verificado no LaTeX de verdade, não só em teste.
 
-> ⚠️ **Nunca verificado.** A compilação `.tex → PDF` ainda não foi exercitada
-> de verdade. Isso inclui o `cvexpress.cls`, a macro `\cvCampo` e a origem das
-> coordenadas em `aux.ts`. Se você for a primeira pessoa a rodar, siga o
-> roteiro no README do worker — e conte o que deu.
+**Sobre a imagem Docker.** Ela constrói e roda. Três defeitos a impediam, e os
+três estão corrigidos no `apps/latex-worker/Dockerfile`, cada um com o motivo
+no comentário:
+
+1. a imagem base `ghcr.io/tectonic-typesetting/tectonic` não é puxável
+   anonimamente (responde `denied`) — hoje o Tectonic vem do tarball de
+   release do GitHub, fixado por `sha256`;
+2. o estágio `build` instalava as dependências de quatro pacotes e mandava
+   compilar todo `packages/**`, incluindo `ai` e `db`, que não estavam
+   instalados — hoje o build é restrito ao subgrafo do worker;
+3. o `node_modules` de `apps/latex-worker/` não era copiado para a imagem
+   final, e o contêiner subia e morria com `Cannot find package 'fastify'`.
+
+> ⚠️ **Ancoramento vertical ainda em aberto.** A ORIGEM das coordenadas que o
+> `aux.ts` extrai já foi calibrada contra um PDF real (ver `AGENTS.md` §8),
+> mas o `y` gravado é um ponto, não uma caixa — desenhar uma região clicável
+> exige uma altura que o `.aux` não fornece. Não afeta nada hoje: o preview
+> edita pelo painel de seções, e o clique direto no PDF ainda não existe.
 
 ---
 
 ## Situação atual
 
-| Parte                                                     | Estado                              |
-| --------------------------------------------------------- | ----------------------------------- |
-| Fundação do monorepo                                      | ✅                                   |
-| `packages/schema` — CvData, limites, FieldId, contrato    | ✅ 38 testes                         |
-| `packages/templates` — escape, motor, template, fixtures  | ✅ 95 testes                         |
-| `packages/i18n` — rótulos pt-BR                           | ✅                                   |
-| `packages/ai` — serviço, adapters, guardrails             | ✅ 64 testes, só contra o mock       |
-| `packages/db` — sessões, link mágico, compilações         | ✅ 35 testes, contra Postgres real   |
-| `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 41 testes                         |
-| `apps/web` — 6 etapas, autosave, sugestões de IA          | ✅ 128 testes, roda localmente       |
-| `apps/web` — preview do PDF, painel de seções, aviso de páginas | ⚠️ componentes prontos, fora da rota |
-| `apps/web` — telas de boas-vindas e "gerando"             | ❌ etapas existem, sem conteúdo      |
-| Botão "apagar meus dados" (LGPD)                          | ⚠️ ação pronta, sem botão            |
-| Envio do e-mail do link mágico                            | ❌ não começou                       |
-| Imagem Docker do worker                                   | ❌ não constrói                      |
-| Compilação real `.tex → PDF`                              | ⚠️ nunca executada                  |
+| Parte | Estado |
+|---|---|
+| Fundação do monorepo | ✅ |
+| `packages/schema` — CvData, limites, FieldId | ✅ 38 testes |
+| `packages/templates` — escape, motor, template | ✅ 99 testes |
+| `packages/i18n` — rótulos pt-BR | ✅ |
+| `packages/ai` — camada de IA, 3 adapters | ✅ 77 testes, só contra o mock |
+| `packages/db` — sessões, link mágico, jobs, migrações | ✅ 35 testes |
+| `apps/latex-worker` — API, fila, cache, sandbox | ✅ 41 testes |
+| `apps/web` — 6 etapas, autosave, sugestões de IA | ✅ roda localmente |
+| `apps/web` — geração, preview, download, painel de seções | ✅ roda com o worker no ar |
+| `apps/web` — testes | ✅ 323 testes |
+| Compilação real `.tex → PDF` (Tectonic 0.15.0 e 0.17.0) | ✅ verificada fora do contêiner |
+| Design system — tokens, tema escuro, contraste AA | ✅ verificado por teste |
+| Postgres pelo `docker compose` | ✅ sobe e aplica a migração |
+| `apps/web` — tela de boas-vindas | ➖ etapa removida por decisão (ver `formulario/etapas.ts`) |
+| Botão "apagar meus dados" (LGPD) | ✅ no preview, com confirmação em dois passos |
+| Envio do link mágico por e-mail | ❌ não começou |
+| Clique direto no PDF para editar | ❌ não existe; origem das coordenadas calibrada, ancoramento vertical em aberto |
+| Imagem Docker do worker | ✅ constrói, sobe `healthy` e compila com a sandbox ligada |
+| Primeira chamada real a um provider de IA | ⚠️ nunca executada |
 
 ## Decisões que valem saber de antemão
 
@@ -270,8 +419,9 @@ número inventado, habilidade que não estava no texto — são verificadas em
 código, não confiadas ao prompt: trocar para um modelo menor não afrouxa
 nenhuma delas.
 
-**Sem conta, sem senha.** A sessão é anônima; o link mágico é o único jeito de
-retomá-la. O banco guarda só o hash do token, que é de uso único e vale 7 dias.
+**Sem conta, sem senha.** A sessão é anônima; o link mágico é o jeito
+planejado de retomá-la. O banco guarda só o hash do token, que é de uso único
+e vale 7 dias.
 
 **A idade é coletada e nunca impressa.** Decisão de produto da V1, aplicada
 estruturalmente: a idade nem entra no ViewModel, então não chega ao PDF nem por
