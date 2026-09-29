@@ -2,11 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { criarConexao, type Banco } from "@cv-express/db";
-import { criarServicoIa, criarProviderDoAmbiente } from "@cv-express/ai";
+import type { HabilidadeSugerida } from "@cv-express/ai";
 import type { CvData } from "@cv-express/schema";
 
 import { salvarEtapa, apagarTudo } from "./sessao";
+import { obterServicoIa } from "./servicoIa";
 import { compilarCv } from "./compilar";
+import * as ia from "./ia";
+import type { ResultadoIa } from "./ia";
 
 /**
  * Server Actions — a fronteira entre navegador e servidor.
@@ -60,36 +63,37 @@ export async function acaoCompilar(cv: CvData) {
 }
 
 /**
+ * A resolução e o REUSO do serviço vivem em `servicoIa.ts`, não aqui.
+ *
+ * Não é organização: a cota por sessão mora dentro do serviço, então quem
+ * decide quando o serviço é criado decide se existe teto de gasto. Isso é
+ * lógica, e lógica precisa de teste — que este arquivo não pode ter, porque
+ * não roda sem o Next (AGENTS.md §3).
+ */
+/**
  * Polimento de uma experiência pela IA.
  *
- * Devolve o texto original em caso de falha, em vez de lançar: o
- * planejamento exige que a IA nunca bloqueie o fluxo.
+ * Devolve resultado, nunca exceção: a IA não pode bloquear o fluxo, e em
+ * produção a mensagem de uma exceção de Server Action é substituída por um
+ * digest — então o motivo precisa vir como dado para a tela poder explicá-lo.
  */
 export async function acaoPolirExperiencia(
   sessionId: string,
   cv: CvData,
   experienciaId: string,
-): Promise<string[]> {
-  const experiencia = cv.experiencias.find((e) => e.id === experienciaId);
-  if (!experiencia) return [];
+): Promise<ResultadoIa<string[]>> {
+  const servico = obterServicoIa();
+  if (!servico) return { ok: false, motivo: "sem_configuracao" };
 
-  const servico = criarServicoIa(criarProviderDoAmbiente());
-  const r = await servico.polirExperiencia(
-    { cargo: experiencia.cargo, descricao: experiencia.descricaoOriginal },
-    sessionId,
-  );
-
-  if (!r.ok) throw new Error(r.erro.message);
-  return r.dados.bullets;
+  return ia.polirExperiencia(servico, cv, experienciaId, sessionId);
 }
 
-export async function acaoNormalizarHabilidades(sessionId: string, cv: CvData) {
-  const servico = criarServicoIa(criarProviderDoAmbiente());
-  const r = await servico.normalizarHabilidades(
-    { texto: cv.habilidades.textoOriginal },
-    sessionId,
-  );
+export async function acaoNormalizarHabilidades(
+  sessionId: string,
+  cv: CvData,
+): Promise<ResultadoIa<HabilidadeSugerida[]>> {
+  const servico = obterServicoIa();
+  if (!servico) return { ok: false, motivo: "sem_configuracao" };
 
-  if (!r.ok) throw new Error(r.erro.message);
-  return r.dados.itens;
+  return ia.normalizarHabilidades(servico, cv, sessionId);
 }
