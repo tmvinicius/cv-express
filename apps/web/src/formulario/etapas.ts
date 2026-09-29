@@ -9,7 +9,7 @@ import {
 } from "@cv-express/schema";
 
 /**
- * As 9 etapas do formulário (seção 6 do planejamento), declarativas.
+ * As 8 etapas do formulário, declarativas.
  *
  * Cada etapa sabe validar a si mesma reaproveitando o SUB-SCHEMA da sua seção,
  * que já existe em @cv-express/schema. Isso resolve um problema que aparece só
@@ -22,8 +22,25 @@ import {
  * novo: só se escolhe qual pedaço do currículo validar.
  */
 
+/**
+ * DIVERGE DO PLANEJAMENTO, que previa 9 etapas começando por "boas-vindas".
+ *
+ * A etapa não existe aqui, e a razão está escrita em `app/page.tsx`: "sem tela
+ * de login, sem 'criar conta', sem escolha nenhuma antes de começar. Cada
+ * decisão a menos antes do primeiro campo é uma desistência a menos." Uma tela
+ * que só diz o que vai acontecer e pede um clique é exatamente uma decisão a
+ * mais antes do primeiro campo.
+ *
+ * Ela chegou a existir em `ETAPAS` sem bloco de renderização, e o efeito era
+ * concreto: em `pessoal`, `voltar` devolvia "boas-vindas", o botão Voltar
+ * aparecia, e o primeiro clique possível do produto levava a uma tela em
+ * branco com uma barra de progresso. Com a etapa fora, `pessoal` é a primeira
+ * e `voltar("pessoal")` devolve `null` sozinho — sem caso especial em lugar
+ * nenhum.
+ *
+ * Se um dia a tela for construída, este é o ponto onde a decisão se reabre.
+ */
 export type IdEtapa =
-  | "boas-vindas"
   | "pessoal"
   | "objetivo"
   | "experiencias"
@@ -47,9 +64,8 @@ export interface Etapa {
   /**
    * Conta para a barra de progresso.
    *
-   * Boas-vindas, "gerando" e preview não contam: a primeira não pede nada, e
-   * as duas últimas vêm depois do preenchimento. Incluí-las faria a barra
-   * mostrar 11% antes de a pessoa digitar qualquer coisa — animador e falso.
+   * "gerando" e preview não contam: vêm depois do preenchimento. Incluí-las
+   * faria a barra chegar a 100% antes de a pessoa terminar — animador e falso.
    */
   contaNoProgresso: boolean;
   /** Erros desta etapa, ou lista vazia. Nunca olha o resto do currículo. */
@@ -79,14 +95,6 @@ function errosDaLista<T>(
 
 export const ETAPAS: readonly Etapa[] = [
   {
-    id: "boas-vindas",
-    rotulo: "Boas-vindas",
-    opcional: false,
-    contaNoProgresso: false,
-    validar: () => [],
-    preenchida: () => true,
-  },
-  {
     id: "pessoal",
     rotulo: "Seus dados",
     opcional: false,
@@ -97,9 +105,29 @@ export const ETAPAS: readonly Etapa[] = [
   {
     id: "objetivo",
     rotulo: "Objetivo",
+    // Obrigatório — e a regra mora AQUI, de propósito.
+    //
+    // `objetivoSchema.texto` não tem `.min(1)`, e não pode ter: o mesmo schema
+    // valida o autosave, que precisa aceitar rascunho vazio. Pôr a exigência
+    // lá faria o formulário recusar gravar enquanto a pessoa ainda não
+    // escreveu o objetivo — e o sintoma ("não salvou") apareceria longe da
+    // causa. Quem quiser mexer nisso tem de mexer também em
+    // VAZIO_PERMITIDO_EM_RASCUNHO (acoes/sessao.ts).
+    //
+    // Sem esta linha, `opcional: false` era decorativo: `validar` devolvia []
+    // com texto vazio, `avancar` deixava passar e `prontoParaGerar` não
+    // acusava pendência — enquanto `preenchida` exigia texto, então a barra
+    // nunca chegava a 100% para quem pulou. O botão dizia "pode gerar" e a
+    // barra dizia "falta coisa", sobre o mesmo campo.
     opcional: false,
     contaNoProgresso: true,
-    validar: (cv) => errosDe(objetivoSchema.safeParse(cv.objetivo)),
+    validar: (cv) => {
+      const erros = errosDe(objetivoSchema.safeParse(cv.objetivo));
+      if (cv.objetivo.texto.trim() === "") {
+        erros.push("Objetivo: escreva uma frase sobre o que você procura.");
+      }
+      return erros;
+    },
     preenchida: (cv) => cv.objetivo.texto.trim() !== "",
   },
   {

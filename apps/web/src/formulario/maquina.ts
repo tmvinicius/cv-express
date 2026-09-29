@@ -9,31 +9,108 @@ import { ETAPAS, etapaPorId, indiceDa, type Etapa, type IdEtapa } from "./etapas
  * faz recarregar a página não perder nada, e é testável sem renderizar nada.
  */
 
+/**
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  O CRITÉRIO ÚNICO DE PROGRESSO                                           ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Uma etapa está RESOLVIDA quando não há mais nada a fazer nela:
+ *
+ *   concluida — foi preenchida e o que está lá é válido;
+ *   pulada    — é opcional, está vazia, e a pessoa já passou dela. Pular é
+ *               uma decisão, não uma pendência: quem está no primeiro emprego
+ *               não tem experiência para contar, e uma barra que a cobra para
+ *               sempre transforma o produto num boletim.
+ *
+ * `percentual` = resolvidas ÷ contáveis. Nada mais.
+ *
+ * Isto existe porque a versão anterior tinha DOIS critérios ao mesmo tempo: a
+ * barra media etapas preenchidas e o texto "Etapa 1 de 6" media a posição na
+ * fila. Os dois apareciam lado a lado no cabeçalho dizendo coisas
+ * contraditórias — 0% em "Etapa 1 de 6" —, e a pessoa não tinha como saber
+ * qual dos dois estava mentindo.
+ *
+ * A saída daqui é o ÚNICO insumo da barra, do contador e da trilha de etapas.
+ * Se um indicador novo precisar de outro número, o lugar de acrescentá-lo é
+ * este, nunca o componente.
+ */
+export type EstadoEtapa = "concluida" | "pulada" | "pendente";
+
+export interface EtapaNaTrilha {
+  id: IdEtapa;
+  rotulo: string;
+  opcional: boolean;
+  estado: EstadoEtapa;
+  /** É onde a pessoa está agora. Independente de estar resolvida ou não. */
+  atual: boolean;
+  /** Dá para ir direto para ela a partir de onde a pessoa está? */
+  acessivel: boolean;
+  /** Posição visível, 1 a 6. */
+  posicao: number;
+}
+
 export interface Progresso {
-  /** 0 a 100, para a barra. */
+  /** 0 a 100, para a barra. Deriva de `resolvidas`. */
   percentual: number;
+  /** Concluídas + puladas. É o que a barra mede. */
+  resolvidas: number;
+  /** Só as preenchidas e válidas. Menor ou igual a `resolvidas`. */
   etapasConcluidas: number;
   totalDeEtapas: number;
   rotuloAtual: string;
   /** Posição visível ao usuário, contando só as etapas de preenchimento. */
   posicaoAtual: number;
+  /**
+   * A etapa atual é uma das seis de preenchimento?
+   *
+   * Falso em boas-vindas, "gerando" e preview. Sem isto o cabeçalho anunciava
+   * "Etapa 1 de 6" na tela de boas-vindas, onde não se preenche nada.
+   */
+  naTrilha: boolean;
+  /** As seis etapas contáveis, em ordem, com o estado de cada uma. */
+  etapas: EtapaNaTrilha[];
 }
 
 export function calcularProgresso(atual: IdEtapa, cv: CvData): Progresso {
   const contaveis = ETAPAS.filter((e) => e.contaNoProgresso);
-  const concluidas = contaveis.filter((e) => e.preenchida(cv)).length;
-
   const indiceAtual = indiceDa(atual);
+
+  const etapas: EtapaNaTrilha[] = contaveis.map((e, i) => ({
+    id: e.id,
+    rotulo: e.rotulo,
+    opcional: e.opcional,
+    estado: estadoDa(e, cv, indiceAtual),
+    atual: e.id === atual,
+    acessivel: podeIrPara(e.id, atual, cv),
+    posicao: i + 1,
+  }));
+
+  const concluidas = etapas.filter((e) => e.estado === "concluida").length;
+  const resolvidas = etapas.filter((e) => e.estado !== "pendente").length;
+
   const posicao = contaveis.findIndex((e) => indiceDa(e.id) >= indiceAtual) + 1;
 
   return {
-    percentual: Math.round((concluidas / contaveis.length) * 100),
+    percentual: Math.round((resolvidas / contaveis.length) * 100),
+    resolvidas,
     etapasConcluidas: concluidas,
     totalDeEtapas: contaveis.length,
     rotuloAtual: etapaPorId(atual).rotulo,
     // Depois da última etapa contável (gerando/preview), a posição é o total.
     posicaoAtual: posicao === 0 ? contaveis.length : posicao,
+    naTrilha: etapaPorId(atual).contaNoProgresso,
+    etapas,
   };
+}
+
+function estadoDa(etapa: Etapa, cv: CvData, indiceAtual: number): EstadoEtapa {
+  if (etapa.preenchida(cv)) {
+    // Preenchida com erro não é concluída: contá-la faria a barra andar por
+    // causa de um dado que o banco vai recusar.
+    return etapa.validar(cv).length === 0 ? "concluida" : "pendente";
+  }
+  const jaPassou = indiceDa(etapa.id) < indiceAtual;
+  return etapa.opcional && jaPassou ? "pulada" : "pendente";
 }
 
 export type ResultadoAvanco =

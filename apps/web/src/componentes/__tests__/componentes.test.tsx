@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 import { Campo } from "../Campo";
 import { BarraProgresso } from "../BarraProgresso";
+import type { Progresso } from "../../formulario/maquina";
 import { IndicadorAutosave } from "../IndicadorAutosave";
 
 afterEach(cleanup);
@@ -120,16 +121,25 @@ describe("Campo", () => {
 });
 
 describe("BarraProgresso", () => {
-  const progresso = {
+  /**
+   * A barra não calcula nada: recebe `Progresso` pronto de `calcularProgresso`.
+   * Os testes que provam o CRITÉRIO estão em formulario/__tests__/maquina;
+   * aqui se prova que o que é exibido é o que foi recebido.
+   */
+  const progresso = (extra: Partial<Progresso> = {}): Progresso => ({
     percentual: 40,
+    resolvidas: 2,
     etapasConcluidas: 2,
     totalDeEtapas: 5,
     rotuloAtual: "Objetivo",
     posicaoAtual: 2,
-  };
+    naTrilha: true,
+    etapas: [],
+    ...extra,
+  });
 
   it("expõe os valores para tecnologia assistiva", () => {
-    render(<BarraProgresso progresso={progresso} />);
+    render(<BarraProgresso progresso={progresso()} />);
 
     const barra = screen.getByRole("progressbar");
     expect(barra.getAttribute("aria-valuenow")).toBe("40");
@@ -137,18 +147,32 @@ describe("BarraProgresso", () => {
     expect(barra.getAttribute("aria-valuemax")).toBe("100");
   });
 
-  it("descreve a posição por extenso", () => {
-    // Sem isto, quem não enxerga a barra não sabe onde está no formulário.
-    render(<BarraProgresso progresso={progresso} />);
-    expect(screen.getByRole("progressbar").getAttribute("aria-label")).toContain(
-      "etapa 2 de 5",
+  it("anuncia etapas prontas, não porcentagem seca", () => {
+    // "40 por cento" não diz quanto falta em etapas; "2 de 5" diz.
+    render(<BarraProgresso progresso={progresso()} />);
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuetext")).toBe(
+      "2 de 5 etapas prontas",
     );
   });
 
-  it("mostra a posição também em texto", () => {
-    render(<BarraProgresso progresso={progresso} />);
-    expect(screen.getByText(/etapa 2 de 5/i)).toBeDefined();
-    expect(screen.getByText("Objetivo")).toBeDefined();
+  it("mostra posição e contagem em texto, dos mesmos números", () => {
+    render(<BarraProgresso progresso={progresso()} />);
+
+    expect(screen.getByText(/etapa 2 de 5: objetivo/i)).toBeDefined();
+    expect(screen.getByText("2 de 5 etapas prontas")).toBeDefined();
+  });
+
+  it("fora das etapas de preenchimento, não inventa uma posição", () => {
+    // O defeito relatado: "Etapa 1 de 6" na tela de boas-vindas, ao lado de
+    // uma barra em 0%. Nas telas fora da trilha não existe posição.
+    render(
+      <BarraProgresso
+        progresso={progresso({ naTrilha: false, rotuloAtual: "Seu currículo" })}
+      />,
+    );
+
+    expect(screen.queryByText(/etapa \d+ de/i)).toBeNull();
+    expect(screen.getByText("Seu currículo")).toBeDefined();
   });
 });
 
