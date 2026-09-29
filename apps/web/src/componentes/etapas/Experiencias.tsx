@@ -20,19 +20,26 @@ export function Experiencias({
   cv,
   despachar,
   sugestoes,
+  iaDisponivel,
   aoPedirSugestao,
+  itemEmFoco,
 }: {
   cv: CvData;
   despachar: Despachar;
   /** Estado da sugestão por id de experiência. */
   sugestoes: Record<string, EstadoSugestao>;
+  /** O servidor tem IA configurada? Repassado ao botão de cada item. */
+  iaDisponivel?: boolean;
   aoPedirSugestao: (id: string) => void;
+  /** Item que a pessoa pediu para ver, vindo do painel de seções. */
+  itemEmFoco?: string | undefined;
 }) {
   return (
     <div className="etapa">
       <h2>Por onde você já passou?</h2>
 
       <ListaEditavel
+        itemEmFoco={itemEmFoco}
         itens={cv.experiencias}
         titulo="Experiências profissionais"
         textoVazio="Ainda sem experiências aqui. Se este é seu primeiro emprego, pode seguir em frente — o currículo funciona sem esta parte."
@@ -124,6 +131,7 @@ export function Experiencias({
               <AprovacaoIa
                 original={exp.descricaoOriginal}
                 estado={sugestoes[exp.id] ?? { fase: "ocioso" }}
+                {...(iaDisponivel === undefined ? {} : { iaDisponivel })}
                 aoPedir={() => aoPedirSugestao(exp.id)}
                 aoUsar={(bullets) =>
                   despachar({ tipo: "exp:aplicarIa", id: exp.id, bullets })

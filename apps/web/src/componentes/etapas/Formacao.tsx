@@ -23,12 +23,22 @@ const STATUS: { valor: StatusFormacao; rotulo: string }[] = (
   ["concluido", "em_andamento", "trancado"] as const
 ).map((v) => ({ valor: v, rotulo: ptBR.statusFormacao[v] }));
 
-export function Formacao({ cv, despachar }: { cv: CvData; despachar: Despachar }) {
+export function Formacao({
+  cv,
+  despachar,
+  itemEmFoco,
+}: {
+  cv: CvData;
+  despachar: Despachar;
+  /** Item que a pessoa pediu para ver, vindo do painel de seções. */
+  itemEmFoco?: string | undefined;
+}) {
   return (
     <div className="etapa">
       <h2>E os estudos?</h2>
 
       <ListaEditavel
+        itemEmFoco={itemEmFoco}
         itens={cv.formacao}
         titulo="Formação acadêmica"
         textoVazio="Nada aqui ainda. Curso técnico e curso livre também contam."

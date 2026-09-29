@@ -1,4 +1,5 @@
 import {
+  parseFieldId,
   dadosPessoaisSchema,
   objetivoSchema,
   experienciaSchema,
@@ -193,4 +194,53 @@ export function etapaPorId(id: IdEtapa): Etapa {
 
 export function indiceDa(id: IdEtapa): number {
   return ETAPAS.findIndex((e) => e.id === id);
+}
+
+/** Seções cujo conteúdo é uma LISTA — as únicas em que "qual item" existe. */
+const SECOES_DE_LISTA = new Set<IdEtapa>(["experiencias", "formacao", "idiomas"]);
+
+export interface DestinoDeCampo {
+  etapa: IdEtapa;
+  /** O item específico, quando o id apontava para um. */
+  itemId?: string;
+}
+
+/**
+ * Para onde levar quem clicou num campo ou numa seção.
+ *
+ * Recebe os ids do painel de seções (`experiencias.<id>`) e das sugestões de
+ * corte (`experiencias.<id>.cargo`), e devolve a etapa MAIS o item.
+ *
+ * O item é a razão de esta função existir. Antes só se lia o primeiro
+ * segmento: clicar em "Experiência 3" levava à etapa de experiências sem
+ * rolar até ela nem focar nada, e com cinco experiências na tela a pessoa
+ * tinha de procurar qual ela mesma acabara de pedir. A sugestão de corte era
+ * pior ainda — ela diz exatamente qual cargo encurtar, e o clique entregava a
+ * lista inteira.
+ *
+ * Um id que não corresponde a etapa de dados cai em "pessoal": levar a pessoa
+ * ao começo do formulário é melhor do que um clique que não faz nada.
+ */
+export function destinoDoCampo(fieldId: string): DestinoDeCampo {
+  const partes = fieldId.split(".");
+  const primeiro = partes[0];
+  const etapa = ETAPAS.find((e) => e.id === primeiro && e.contaNoProgresso);
+  if (!etapa) return { etapa: "pessoal" };
+
+  if (!SECOES_DE_LISTA.has(etapa.id)) return { etapa: etapa.id };
+
+  // Forma completa (`experiencias.<id>.cargo`): `parseFieldId` é quem sabe se
+  // o campo existe de verdade, então ele decide. É o uso imediato que essa
+  // função esperava desde que foi escrita.
+  const ref = parseFieldId(fieldId);
+  if (ref && "itemId" in ref) return { etapa: etapa.id, itemId: ref.itemId };
+
+  // Forma curta (`experiencias.<id>`), que é a que o painel de seções emite.
+  const itemId = partes[1];
+  return itemId ? { etapa: etapa.id, itemId } : { etapa: etapa.id };
+}
+
+/** Só a etapa. Mantida porque a maioria dos chamadores não quer o item. */
+export function etapaDoCampo(fieldId: string): IdEtapa {
+  return destinoDoCampo(fieldId).etapa;
 }
