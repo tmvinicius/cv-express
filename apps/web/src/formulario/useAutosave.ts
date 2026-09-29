@@ -126,7 +126,12 @@ export function useAutosave(cv: CvData, opcoes: OpcoesAutosave) {
     }
     // `cv` e `salvar` ficam de fora de propósito: ambos são lidos por ref,
     // e incluí-los reintroduziria o laço de reagendamento.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    //
+    // Sem `eslint-disable` aqui: com o linter de pé, `exhaustive-deps` NÃO
+    // reclama deste efeito — leitura por ref é justamente o que a regra
+    // aceita. O disable que existia aqui era órfão duas vezes: a regra não
+    // rodava (nenhum pacote definia `lint`) e, quando passou a rodar, não
+    // tinha nada a dizer. Ficava só sugerindo uma proteção inexistente.
   }, [serializado, esperaMs]);
 
   return { estado };
