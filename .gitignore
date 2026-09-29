@@ -22,6 +22,14 @@ next-env.d.ts
 *.tex.gerado
 tmp/
 
+# Exceção: fixtures de teste. O comentário acima diz "sempre reconstruíveis a
+# partir do CvData", e é verdade — mas reconstruí-los exige o Tectonic, que
+# não está no CI. Estes arquivos são a SAÍDA de uma compilação real, guardada
+# justamente para que o teste não dependa dele. O de duas páginas prova que o
+# scan de /Type /Page não enxerga um PDF com object stream comprimido, que é
+# o que o xdvipdfmx produz — defeito que nenhum PDF escrito à mão reproduz.
+!apps/latex-worker/src/__tests__/fixtures/*.pdf
+
 # Sistema
 .DS_Store
 *.tsbuildinfo

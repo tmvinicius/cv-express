@@ -81,6 +81,31 @@ function propriedade(corpo: string, nome: string): string | undefined {
  */
 const COLLATOR = new Intl.Collator("pt-BR");
 
+/**
+ * Número da última página, escrito pelo zref-abspage no .aux:
+ *
+ *   \gdef \@abspage@last{2}
+ *
+ * É a fonte primária de `pageCount`. O espaçamento entre `\gdef` e o nome é o
+ * que o LaTeX escreve de fato (confirmado num .aux real), mas aceitamos
+ * qualquer quantidade de espaço para não depender disso.
+ */
+const ABSPAGE_LAST = /\\gdef\s*\\@abspage@last\s*\{(\d+)\}/;
+
+/**
+ * Lê a contagem de páginas do .aux.
+ *
+ * Devolve `undefined` quando o .aux não traz a informação — aí quem chama cai
+ * para o scan do PDF. Nunca lança: a contagem só alimenta um aviso, e falhar a
+ * requisição por causa dela seria trocar um aprimoramento por uma falha.
+ */
+export function extrairTotalDePaginas(conteudoAux: string): number | undefined {
+  const m = ABSPAGE_LAST.exec(conteudoAux);
+  if (!m?.[1]) return undefined;
+  const n = Number(m[1]);
+  return Number.isInteger(n) && n >= 1 ? n : undefined;
+}
+
 interface Parcial {
   x?: number;
   y?: number;

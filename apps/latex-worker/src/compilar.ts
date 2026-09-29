@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { validarCv, type CompilarResposta, type CvData } from "@cv-express/schema";
 import { gerarTex } from "@cv-express/templates";
 
-import { extrairPosicoes } from "./aux.js";
+import { extrairPosicoes, extrairTotalDePaginas } from "./aux.js";
 import { Fila, FilaCheiaError } from "./fila.js";
 import {
   FalhaLatexError,
@@ -125,7 +125,7 @@ export class ServicoCompilacao {
       contentHash: gerado.contentHash,
       templateId: gerado.templateId,
       templateVersao: gerado.templateVersao,
-      pageCount: contarPaginas(resultado.pdf),
+      pageCount: extrairTotalDePaginas(resultado.aux) ?? contarPaginas(resultado.pdf),
       pdf: resultado.pdf.toString("base64"),
       posicoes,
       duracaoMs: resultado.duracaoMs,
@@ -217,16 +217,23 @@ export class ServicoCompilacao {
 }
 
 /**
- * Conta as páginas do PDF.
+ * Conta as páginas do PDF. FALLBACK — a fonte primária é o .aux
+ * (`extrairTotalDePaginas`), e há um motivo forte para essa ordem.
  *
- * Lê a estrutura do arquivo em vez de usar uma biblioteca: a contagem de
- * páginas é o único dado que precisamos do PDF, e o planejamento só a usa
- * para o aviso de "passou de uma página".
+ * Esta função procura `/Type /Page` como texto cru (com o cuidado de não casar
+ * `/Type /Pages`, que é o nó de árvore e apareceria uma vez a mais). Contra o
+ * PDF que o pipeline realmente produz, ela NÃO FUNCIONA: o xdvipdfmx emite
+ * PDF 1.5 e guarda os dicionários de página num object stream comprimido, onde
+ * essa string não aparece em lugar nenhum. Medido sobre a fixture `completa`
+ * compilada com Tectonic 0.17.0: zero ocorrências, num PDF de 1 e noutro de 2
+ * páginas. O resultado era sempre o fallback `1`.
  *
- * Procura `/Type /Page` (com o cuidado de não casar `/Type /Pages`, que é o
- * nó de árvore e apareceria uma vez a mais). Se nada for encontrado, devolve
- * 1: um PDF existe e tem ao menos uma página, e errar a contagem só
- * desliga um aviso — nunca vale falhar a requisição por isso.
+ * Isso desligava, em silêncio, o AvisoPaginas e todo o `sugestoesDeCorte`: o
+ * PDF saía certo e a pessoa nunca recebia a ajuda sobre currículo longo.
+ *
+ * Fica como fallback porque continua valendo para PDF não comprimido, e porque
+ * errar a contagem só desliga um aviso — nunca vale falhar a requisição por
+ * isso.
  */
 export function contarPaginas(pdf: Buffer): number {
   const texto = pdf.toString("latin1");
