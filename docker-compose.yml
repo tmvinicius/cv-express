@@ -1,0 +1,144 @@
+# ==============================================================================
+#  CV Express — ambiente de desenvolvimento local
+#
+#  Sobe as duas dependências de infraestrutura: Postgres e o worker de LaTeX.
+#  O apps/web fica FORA daqui, rodando com `pnpm dev` — hot reload em
+#  contêiner é lento e ninguém usa depois da segunda vez.
+#
+#      docker compose up -d postgres
+#      pnpm --filter @cv-express/web dev
+#
+#  NOMEIE O SERVIÇO. `docker compose up` sem argumento tenta construir a
+#  imagem do worker, que HOJE NÃO CONSTRÓI (AGENTS.md §8: a imagem base do
+#  Tectonic responde 403 ao pull anônimo, e o estágio de build não instala as
+#  dependências de packages/db). A falha aborta a subida inteira e você fica
+#  sem nem o Postgres de pé.
+#
+#  Enquanto isso, o worker roda direto no Node — o passo a passo está em
+#  apps/latex-worker/README.md.
+#
+#  ATENÇÃO antes da primeira subida: se existir um contêiner antigo
+#  publicando a porta 5432 (ex.: `cvexpress-pg` criado na mão), remova-o —
+#  senão o postgres daqui falha com "port is already allocated":
+#
+#      docker rm -f cvexpress-pg
+#
+#  Este arquivo é só para desenvolvimento. Em produção o web vai para a
+#  Vercel e o worker para Fly.io/Railway como contêiner — as opções de
+#  segurança abaixo precisam ser reproduzidas lá, e é por isso que cada uma
+#  tem o comentário dizendo o que defende.
+# ==============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cvexpress
+      # Precisa bater com a DATABASE_URL usada pelo apps/web e pelo worker.
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: cvexpress
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-dados:/var/lib/postgresql/data
+      # As migrações rodam na primeira subida, quando o volume está vazio.
+      # Em produção elas são aplicadas por packages/db/src/migracoes.ts — o
+      # mesmo SQL, um caminho só.
+      #
+      # O diretório precisa existir no repositório: um bind mount para
+      # caminho inexistente é criado como pasta vazia de root e o initdb
+      # simplesmente não roda nada, sem erro visível.
+      - ./packages/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # O worker e o web sobem mais rápido que o Postgres. Sem o healthcheck,
+      # a primeira requisição falha com "connection refused" e parece defeito
+      # de código.
+      test: ["CMD-SHELL", "pg_isready -U cvexpress -d cvexpress"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  latex-worker:
+    build:
+      context: .
+      dockerfile: apps/latex-worker/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      WORKER_TOKEN: token-local-nao-use-em-producao
+      LOG_LEVEL: info
+
+    # Sem depends_on de propósito: O WORKER NÃO USA BANCO. Ele não recebe
+    # DATABASE_URL, não depende de @cv-express/db, e nada em
+    # apps/latex-worker/src/ fala com Postgres — ele recebe CvData por HTTP,
+    # gera o .tex e devolve o PDF.
+    #
+    # Havia aqui um `depends_on: postgres` com o comentário "o worker chega no
+    # banco antes de ele aceitar conexão", descrevendo uma relação que nunca
+    # existiu. Se um dia o worker passar a registrar jobs (packages/db/jobs.ts,
+    # hoje sem chamador em produção), a dependência volta — junto com a
+    # DATABASE_URL que a justifica.
+
+    # ─────────────────────────────────────────────────────────────────────
+    # SANDBOX — a segunda camada. A primeira está no processo (tectonic.ts):
+    # sem shell, tempo limite, diretório temporário por job. Nenhuma das duas
+    # basta sozinha.
+    #
+    # Nada aqui é enfeite de configuração. LaTeX é Turing-completo, e o
+    # worker compila texto que veio de um formulário público.
+    # ─────────────────────────────────────────────────────────────────────
+
+    # Sobre a rede, com honestidade:
+    #
+    # O ideal seria --network=none, e o Dockerfile foi construído para isso
+    # (o cache do Tectonic vem pronto na imagem justamente para o contêiner
+    # não precisar baixar pacote nenhum). Mas um serviço que precisa RECEBER
+    # HTTP não pode ficar sem rede, e `internal: true` no compose corta
+    # também o encaminhamento da porta publicada — o worker subiria
+    # inalcançável.
+    #
+    # Então aqui a rede existe, e o bloqueio de SAÍDA fica para a
+    # plataforma: regra de egress no Fly.io/Railway, ou política de rede no
+    # Kubernetes. Não é equivalente, e vale registrar que não é.
+    #
+    # O que continua valendo em qualquer ambiente: sem shell (tectonic.ts
+    # executa o binário direto), tempo limite, filesystem read-only e
+    # cap_drop ALL. A rede é uma camada entre várias, não a única.
+
+    read_only: true
+    tmpfs:
+      # Monta /tmp inteiro, não só o subdiretório do app: o Tectonic escreve
+      # intermediários e arquivos de lock, e o Node usa /tmp por conta
+      # própria. Com read_only e tmpfs só em /tmp/cvexpress, qualquer
+      # escrita fora dali quebra a compilação em runtime.
+      #
+      # noexec continua valendo: um binário escrito aqui não roda.
+      # 64m não sobrevive a um documento com fontes embutidas.
+      - /tmp:rw,noexec,nosuid,size=256m
+
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128 # uma bomba de fork não derruba o host
+
+    # PID 1 real, que colhe processos zumbis. Sem isto, cada compilação
+    # abortada deixa um defunct e o pids_limit acima é atingido sozinho.
+    init: true
+
+    security_opt:
+      # Impede escalar privilégio via setuid, mesmo que algo no contêiner
+      # tenha o bit ligado.
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    healthcheck:
+      # Depende de o estágio final da imagem ter o binário `node` no PATH.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/saude').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  postgres-dados:

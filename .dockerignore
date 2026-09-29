@@ -1,0 +1,39 @@
+# ==============================================================================
+#  Contexto de build do Docker
+#
+#  Sem este arquivo, `COPY packages/ packages/` levava o node_modules do HOST
+#  para dentro da imagem — por cima do que o `pnpm install` acabara de montar.
+#  O node_modules do pnpm é uma floresta de symlinks apontando para caminhos da
+#  máquina de origem: copiá-lo não é só desperdício de alguns GB de contexto,
+#  é substituir uma instalação correta por links quebrados.
+#
+#  Regra ao mexer aqui: o que a imagem precisa é código-fonte e manifesto.
+#  Tudo que é gerado (node_modules, dist, .next) se reconstrói lá dentro, e
+#  copiar a versão do host só arrisca subir artefato velho.
+# ==============================================================================
+
+**/node_modules
+**/dist
+**/.next
+**/*.tsbuildinfo
+
+.git
+.gitignore
+.github
+
+# O app web não entra na imagem do worker — só o manifesto dele.
+#
+# A exceção não é descuido: `pnpm install --frozen-lockfile` valida o lockfile
+# contra TODOS os projetos de pnpm-workspace.yaml, e aborta se um manifesto
+# faltar. O package.json entra, o código não.
+apps/web
+!apps/web/package.json
+
+# Documentação e artefatos locais.
+*.md
+!apps/latex-worker/README.md
+.env
+.env.*
+**/*.pdf
+**/*.aux
+**/*.log
