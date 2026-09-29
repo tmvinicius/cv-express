@@ -18,6 +18,14 @@ import {
  * no template. É o que garante que "mar/2021 – atual" saia idêntico em todos
  * os currículos gerados — se cada partial montasse a data do seu jeito, a
  * padronização dependeria de disciplina em vez de código.
+ *
+ * Este arquivo tem subpath próprio no `exports` do pacote
+ * (`@cv-express/templates/formatadores`). O motivo: `gerar.ts` importa
+ * `node:fs`, então quem entra pela raiz do pacote arrasta o sistema de
+ * arquivos — inviável no bundle do navegador. O formulário precisa do
+ * `formatarMes` para dizer "o término (mar/2020) é anterior ao início" com a
+ * data escrita exatamente como o PDF vai escrever, e não pode pagar esse
+ * preço. Só há, ainda assim, um único formatador de mês no projeto.
  */
 
 export function formatarMes(data: DataMesAno, dic: Dicionario): string {

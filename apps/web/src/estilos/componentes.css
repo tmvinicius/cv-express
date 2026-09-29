@@ -401,6 +401,36 @@ button.trilha__alvo:hover {
 }
 
 /*
+ * SELECTS: mesma caixa dos outros campos, seta desenhada por nós.
+ *
+ * Fica DEPOIS de .campo__entrada porque `background` ali é atalho e apagaria
+ * a imagem de fundo declarada aqui.
+ *
+ * `appearance: none` é o que tira a seta nativa — a peça que mais denunciava
+ * formulário improvisado, porque cada sistema desenha a sua. O padding à
+ * direita abre espaço para a nossa, e `background-position` a encosta na
+ * borda com a mesma medida de espaçamento do resto.
+ *
+ * O texto continua herdando `font-size: max(var(--texto-base), 16px)` de
+ * base.css: abaixo de 16px o Safari no iOS dá zoom ao focar, e o formulário
+ * "salta" a cada campo.
+ */
+select.campo__entrada {
+  appearance: none;
+  padding-right: calc(var(--esp-3) + 0.9rem);
+  background-image: var(--seta-select);
+  background-repeat: no-repeat;
+  background-position: right var(--esp-3) center;
+  background-size: 0.7rem auto;
+  cursor: pointer;
+
+  /* Sem isto, um select mais estreito que o conteúdo estica a grade do
+     período em vez de encurtar o próprio texto. */
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+/*
  * A borda vermelha é redundante de propósito.
  *
  * Cor sozinha não comunica erro para quem tem daltonismo (WCAG 1.4.1), e
@@ -409,6 +439,209 @@ button.trilha__alvo:hover {
  * tela. Três caminhos para a mesma informação.
  */
 .campo--erro .campo__entrada {
+  border-color: var(--cor-erro);
+  border-width: 2px;
+}
+
+/* ═══ Período ═════════════════════════════════════════════════════════ */
+
+/*
+ * O período é UM campo, não quatro.
+ *
+ * A versão anterior empilhava dois fieldsets com dois selects crus cada um, e
+ * o resultado lia como quatro controles soltos — além de ser o único lugar do
+ * formulário onde os campos não tinham a caixa do design system. O desenho
+ * agora é o de um intervalo: início, travessão, término. O travessão é o mesmo
+ * que o PDF imprime entre as datas, e isso não é enfeite: é o que faz a pessoa
+ * reconhecer na tela a linha que vai sair impressa.
+ */
+.periodo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-3);
+}
+
+.periodo__intervalo {
+  display: grid;
+  /* Empilhado no celular: dois pares de selects não cabem em 320px sem
+     encolher o alvo de toque abaixo do mínimo. */
+  grid-template-columns: 1fr;
+  gap: var(--esp-2) var(--esp-3);
+}
+
+/*
+ * As regras de "estreito" vêm ANTES do @media, e não depois.
+ *
+ * Não é estilo: com a mesma especificidade, quem vem por último vence, e
+ * `@media` não conta como especificidade. Declarada depois, esta linha
+ * sobrescrevia o `display: block` do layout largo e o travessão nunca
+ * aparecia — o defeito custou uma captura de tela para ser visto.
+ */
+.periodo__travessao {
+  display: none;
+  color: var(--cor-texto-suave);
+  /* A caixa tem a altura do alvo de toque, então o travessão cai no centro
+     vertical dos selects mesmo com os grupos alinhados pela base. */
+  height: var(--alvo-toque);
+  line-height: var(--alvo-toque);
+}
+
+@media (min-width: 26rem) {
+  .periodo__intervalo {
+    /*
+     * minmax(0, 1fr) e não 1fr: `1fr` respeita o min-content da coluna, e a
+     * legenda "CONCLUSÃO (OU PREVISÃO)" é larga o bastante para roubar espaço
+     * do lado esquerdo.
+     */
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: end;
+  }
+
+  .periodo__travessao {
+    display: block;
+  }
+}
+
+.periodo__grupo {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+
+  /*
+   * `width: 100%` porque FIELDSET NÃO ESTICA.
+   *
+   * A largura `auto` de um fieldset é fit-content, não stretch — herança de
+   * quando ele desenhava a moldura em volta do próprio conteúdo. Como item de
+   * grade, ele encolhia até o texto e as duas colunas saíam de tamanhos
+   * diferentes: o mês do início aparecia cortado em "Fev…" enquanto sobrava
+   * espaço vazio à direita. É um caso onde o elemento certo em semântica
+   * precisa de uma linha a mais em aparência.
+   */
+  width: 100%;
+}
+
+/*
+ * Rótulo em caixa alta pequena, como os títulos da comparação da IA.
+ *
+ * Diferencia "Início"/"Conclusão" — que nomeiam partes de um campo — dos
+ * rótulos de campo inteiro, que são texto normal em peso médio. Sem essa
+ * diferença, o período competia em hierarquia com "Curso" e "Instituição".
+ */
+.periodo__rotulo {
+  font-size: var(--texto-xs);
+  font-weight: var(--peso-medio);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cor-texto-suave);
+  padding: 0;
+  margin-bottom: var(--esp-1);
+}
+
+.periodo__selects {
+  display: grid;
+  /*
+   * O mês fica com a sobra; o ano reserva o que quatro dígitos e a seta
+   * precisam. Deixar o ano encolher junto com o mês foi o que o truncou em
+   * "2…" na primeira tentativa — e ano ilegível é pior que mês abreviado.
+   */
+  grid-template-columns: minmax(0, 1fr) minmax(5.75rem, auto);
+  gap: var(--esp-2);
+}
+
+/*
+ * "atual" ocupando o lugar do término.
+ *
+ * Marcar a caixa removia dois campos e deixava um buraco no lugar: o intervalo
+ * desmontava e a linha parecia quebrada. Aqui o lado direito continua
+ * existindo e diz o que está ali.
+ */
+.periodo__marca-atual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--alvo-toque);
+  border: 1px dashed var(--cor-borda-forte);
+  border-radius: var(--raio);
+  color: var(--cor-texto-suave);
+  font-size: var(--texto-sm);
+  font-style: italic;
+}
+
+.periodo__atual {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  min-height: var(--alvo-toque);
+}
+
+/*
+ * O resumo: a mesma linha que vai para o PDF.
+ *
+ * Confere o que os quatro controles somam, sem a pessoa precisar montar a
+ * frase de cabeça — e é o que dá utilidade ao "atual", que antes sumia com
+ * dois campos sem dizer o que colocou no lugar.
+ */
+.periodo__resumo {
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+}
+
+.periodo__resumo strong {
+  color: var(--cor-texto);
+  font-weight: var(--peso-medio);
+  font-variant-numeric: tabular-nums; /* o ano não dança ao trocar de mês */
+}
+
+.periodo__atual input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--cor-primaria);
+}
+
+/*
+ * Incoerência de data: dita ao lado do campo, no momento em que nasce.
+ *
+ * Erro usa a cor de erro porque o avanço vai mesmo ficar bloqueado (e o
+ * autosave recusa gravar). Aviso usa a cor de atenção: é palpite nosso sobre
+ * a intenção da pessoa, e ela tem o direito de seguir com a data que
+ * escolheu. Tratar palpite como erro ensina a ignorar avisos.
+ */
+.periodo__diagnosticos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-1);
+  font-size: var(--texto-sm);
+}
+
+.periodo__diagnostico {
+  padding: var(--esp-2) var(--esp-3);
+  border-radius: var(--raio-sm);
+  border-left: 3px solid currentcolor;
+}
+
+.periodo__diagnostico--erro {
+  color: var(--cor-erro);
+  background: var(--cor-erro-fundo);
+  font-weight: var(--peso-medio);
+}
+
+.periodo__diagnostico--aviso {
+  color: var(--cor-atencao);
+  background: var(--cor-atencao-fundo);
+}
+
+/* A sugestão é a parte acionável; fica legível, mas não compete com o
+   diagnóstico. */
+.periodo__sugestao {
+  display: block;
+  color: var(--cor-texto);
+  font-weight: var(--peso-normal);
+}
+
+/* Mesma redundância do campo de texto: borda além da mensagem, porque cor
+   sozinha não comunica erro para quem tem daltonismo. */
+.periodo--invalido select.campo__entrada {
   border-color: var(--cor-erro);
   border-width: 2px;
 }

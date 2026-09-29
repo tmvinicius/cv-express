@@ -1,7 +1,14 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { novoCv, novaExperiencia, type CvData } from "@cv-express/schema";
+import {
+  novoCv,
+  novaExperiencia,
+  novaFormacao,
+  anoMaximo,
+  type CvData,
+  type Formacao as FormacaoItem,
+} from "@cv-express/schema";
 
 import { DadosPessoais } from "../etapas/DadosPessoais";
 import { Objetivo } from "../etapas/Objetivo";
@@ -9,6 +16,7 @@ import { Experiencias } from "../etapas/Experiencias";
 import { Idiomas } from "../etapas/Idiomas";
 import { AprovacaoIa } from "../AprovacaoIa";
 import { Habilidades } from "../etapas/Habilidades";
+import { Formacao } from "../etapas/Formacao";
 
 afterEach(cleanup);
 
@@ -372,5 +380,133 @@ describe("Habilidades", () => {
     expect(
       screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
     ).toHaveProperty("disabled", false);
+  });
+});
+
+/**
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  FORMAÇÃO: TÉRMINO SEMPRE, PORQUE É PREVISÃO DE FORMATURA                ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Decisão de produto: "2022 – atual" não diz quando a pessoa se forma, e é
+ * exatamente isso que o recrutador quer saber. Então a formação não tem o
+ * checkbox de período em aberto — quem ainda cursa declara pela Situação, que
+ * já sai impressa no PDF — e o término aceita data no futuro.
+ */
+describe("Formacao", () => {
+  const comFormacao = (extra: Partial<FormacaoItem> = {}): CvData =>
+    cv({
+      formacao: [
+        novaFormacao({
+          id: "f1",
+          curso: "Análise de Sistemas",
+          instituicao: "IFMG",
+          periodo: { inicio: { ano: 2024, mes: 2 }, fim: { ano: 2027, mes: 12 } },
+          ...extra,
+        }),
+      ],
+    });
+
+  it("não oferece 'ainda estou cursando' — isso é a Situação", () => {
+    render(<Formacao cv={comFormacao()} despachar={vi.fn()} />);
+
+    expect(screen.queryByLabelText(/cursando/i)).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    // E a Situação explica que é ela quem carrega essa informação.
+    expect(screen.getByLabelText(/situação/i)).toBeDefined();
+    expect(screen.getByText(/em andamento.*previsão de formatura/i)).toBeDefined();
+  });
+
+  it("o término se chama pelo que é: conclusão ou previsão", () => {
+    render(<Formacao cv={comFormacao()} despachar={vi.fn()} />);
+    expect(screen.getByLabelText(/conclusão \(ou previsão\): ano/i)).toBeDefined();
+  });
+
+  it("oferece anos à frente, até o teto que o schema aceita", () => {
+    // Sem isso não há como registrar previsão de formatura: a lista ia só do
+    // ano corrente para trás.
+    render(<Formacao cv={comFormacao()} despachar={vi.fn()} />);
+
+    const anos = screen.getByLabelText(/conclusão \(ou previsão\): ano/i);
+    const opcoes = Array.from(anos.querySelectorAll("option")).map((o) => o.value);
+    const teto = String(anoMaximo());
+
+    expect(opcoes).toContain(teto);
+    // Nada além do teto: opção oferecida que a validação recusa é armadilha.
+    expect(Number(opcoes[0])).toBe(anoMaximo());
+  });
+
+  it("previsão no futuro não gera aviso nenhum", () => {
+    render(<Formacao cv={comFormacao({ status: "em_andamento" })} despachar={vi.fn()} />);
+
+    expect(screen.queryByText(/ainda não chegou/i)).toBeNull();
+    expect(screen.queryByText(/está no futuro/i)).toBeNull();
+  });
+
+  it("'Concluído' com data futura continua avisando", () => {
+    // O problema não é a data: é ela ao lado de "Concluído", que é o valor
+    // inicial do campo.
+    render(<Formacao cv={comFormacao({ status: "concluido" })} despachar={vi.fn()} />);
+
+    expect(screen.getByText(/marcou "Concluído"/i)).toBeDefined();
+  });
+
+  it("currículo antigo com período em aberto não quebra a tela, e pede a data", () => {
+    /**
+     * `fim: "atual"` só existe em currículo gravado antes desta mudança. O
+     * select mostra o início no lugar do término — mostrar a string deixaria o
+     * campo descontrolado — e o aviso pede a data em vez de gravar sozinho uma
+     * previsão que ninguém escolheu.
+     */
+    render(
+      <Formacao
+        cv={comFormacao({ periodo: { inicio: { ano: 2020, mes: 2 }, fim: "atual" } })}
+        despachar={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText(/conclusão \(ou previsão\): ano/i),
+    ).toHaveProperty("value", "2020");
+    expect(screen.getByText(/falta a data de conclusão/i)).toBeDefined();
+  });
+
+  it("mostra o período como ele vai sair impresso", () => {
+    /**
+     * A linha de resumo usa o MESMO formatador do documento. É o que permite
+     * conferir o período sem montar a frase de cabeça a partir de quatro
+     * listas suspensas — e o que dá utilidade ao "atual", que antes sumia com
+     * dois campos sem dizer o que tinha colocado no lugar.
+     */
+    render(<Formacao cv={comFormacao()} despachar={vi.fn()} />);
+    expect(screen.getByText("fev/2024 – dez/2027")).toBeDefined();
+  });
+
+  it("os meses aparecem por extenso, não abreviados", () => {
+    // "jan" é a convenção do DOCUMENTO e está certa no PDF. Numa lista
+    // suspensa, onde há espaço, ela só parece formulário inacabado.
+    render(<Formacao cv={comFormacao()} despachar={vi.fn()} />);
+
+    const meses = screen.getAllByLabelText(/início: mês/i)[0]!;
+    const opcoes = Array.from(meses.querySelectorAll("option")).map(
+      (o) => o.textContent,
+    );
+
+    expect(opcoes).toContain("Fevereiro");
+    expect(opcoes).not.toContain("fev");
+    expect(opcoes).toHaveLength(12);
+  });
+
+  it("período invertido aparece inline, como na experiência", () => {
+    render(
+      <Formacao
+        cv={comFormacao({
+          periodo: { inicio: { ano: 2024, mes: 6 }, fim: { ano: 2020, mes: 1 } },
+        })}
+        despachar={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/é anterior ao início/i)).toBeDefined();
   });
 });

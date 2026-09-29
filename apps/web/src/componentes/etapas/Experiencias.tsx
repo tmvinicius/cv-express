@@ -4,6 +4,7 @@ import { Campo } from "../Campo";
 import { SeletorPeriodo } from "../SeletorPeriodo";
 import { ListaEditavel } from "../ListaEditavel";
 import { AprovacaoIa, type EstadoSugestao } from "../AprovacaoIa";
+import { diagnosticarPeriodo } from "../../formulario/coerencia";
 import type { Despachar } from "../../formulario/reducer";
 
 /**
@@ -81,6 +82,7 @@ export function Experiencias({
                 despachar({ tipo: "exp:periodo", id: exp.id, inicio })
               }
               aoMudarFim={(fim) => despachar({ tipo: "exp:periodo", id: exp.id, fim })}
+              diagnosticos={diagnosticarPeriodo(exp.periodo)}
             />
 
             <Campo

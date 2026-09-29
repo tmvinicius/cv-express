@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./formatadores": {
+      "types": "./dist/formatadores.d.ts",
+      "default": "./dist/formatadores.js"
+    },
     "./fixtures": {
       "types": "./dist/fixtures.d.ts",
       "default": "./dist/fixtures.js"
