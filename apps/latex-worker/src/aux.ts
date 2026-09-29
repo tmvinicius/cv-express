@@ -32,19 +32,29 @@ export function spParaBp(sp: number): number {
 }
 
 /**
- * ATENÇÃO — ORIGEM DAS COORDENADAS NÃO CALIBRADA
+ * Origem das coordenadas: canto INFERIOR ESQUERDO, y crescendo para cima — a
+ * mesma convenção do PDF, o que torna a conversão uma simples mudança de
+ * unidade.
  *
- * Assumimos a convenção do pdfTeX para \pdfsavepos: origem no canto INFERIOR
- * ESQUERDO da página, com y crescendo para cima — a mesma do PDF, o que torna
- * a conversão uma simples mudança de unidade.
+ * CALIBRADO contra uma compilação real (Tectonic 0.17.0, fixture `completa`,
+ * A4 = 595,28 x 841,89 bp, margens da classe: left=1,8cm, top=1,6cm). O
+ * `.aux` relatou, para `pessoal.nome`:
  *
- * Isso não pôde ser conferido contra um PDF real (o Tectonic não estava
- * disponível no ambiente). Se na primeira compilação as regiões saírem
- * espelhadas na vertical ou deslocadas por uma polegada, o ajuste é aqui e em
- * nenhum outro lugar: esta função é o único ponto que traduz coordenadas.
+ *   posx{3356429} -> 51,024 bp  ==  1,8 cm  (margem esquerda, exata)
+ *   posy{52397491} -> 796,535 bp ==  841,89 - 45,355, e 45,355 bp == 1,6 cm
+ *                                    (margem superior, exata)
  *
- * Calibragem sugerida: gerar um currículo de uma página, comparar a posição
- * relatada para `pessoal.nome` com a posição real no PDF, e corrigir.
+ * Os dois batem com a geometria declarada, então a origem e a escala estão
+ * certas. Se alguma vez as regiões saírem espelhadas na vertical ou
+ * deslocadas por uma polegada, o ajuste é aqui e em nenhum outro lugar: esta
+ * função é o único ponto que traduz coordenadas.
+ *
+ * O que continua em aberto é o ANCORAMENTO vertical, não a origem: o y
+ * gravado é o ponto de referência corrente no instante em que a âncora é
+ * emitida, não o topo nem a base do texto renderizado. Desenhar um retângulo
+ * clicável exige uma altura, que nada no .aux fornece hoje — é o que falta
+ * resolver antes da sobreposição no PDF. Roteiro em
+ * `apps/latex-worker/README.md`.
  */
 export function converterPosicao(xSp: number, ySp: number): { x: number; y: number } {
   return { x: spParaBp(xSp), y: spParaBp(ySp) };
@@ -64,6 +74,12 @@ function propriedade(corpo: string, nome: string): string | undefined {
   const m = new RegExp(`\\\\${nome}\\{([^}]*)\\}`).exec(corpo);
   return m?.[1];
 }
+
+/**
+ * Ordenação determinística dos fieldIds. Os ids são ASCII (`campo.ts`), mas
+ * fixar o locale é o que garante a mesma ordem em qualquer ICU.
+ */
+const COLLATOR = new Intl.Collator("pt-BR");
 
 interface Parcial {
   x?: number;
@@ -95,8 +111,22 @@ export function extrairPosicoes(conteudoAux: string): PosicaoCampo[] {
     const corte = rotulo.lastIndexOf("@");
     if (corte <= 0) continue;
 
-    const fieldId = rotulo.slice(0, corte);
-    const sufixo = rotulo.slice(corte + 1);
+    // O .trim() não é defensivo: o rótulo REALMENTE chega com espaços.
+    //
+    // O motor exige espaço dentro das chaves (`{ {{ x }} }`), porque `{{{` é
+    // erro de compilação por desenho (motor/renderizar.ts). O .tex sai então
+    // como `\cvCampo{ pessoal.nome }{ ... }`, o TeX preserva os espaços ao ler
+    // o argumento, e o .aux de uma compilação real traz:
+    //
+    //   \zref@newlabel{ pessoal.nome @x}{\posx{3356429}}
+    //
+    // (verificado com Tectonic 0.17.0 sobre a fixture `completa`). Sem o trim
+    // o fieldId sai como " pessoal.nome ", que nunca casa com o
+    // "pessoal.nome" que campo.ts constrói no formulário — e toda região
+    // clicável seria descartada em silêncio por parseFieldId.
+    const fieldId = rotulo.slice(0, corte).trim();
+    const sufixo = rotulo.slice(corte + 1).trim();
+    if (fieldId === "") continue;
 
     const atual = parciais.get(fieldId) ?? {};
 
@@ -132,7 +162,11 @@ export function extrairPosicoes(conteudoAux: string): PosicaoCampo[] {
   // Ordem estável: o .aux reflete a ordem de compilação, que é estável, mas
   // o Map preserva ordem de inserção e não de conteúdo. Ordenar aqui torna a
   // resposta comparável entre execuções e os testes legíveis.
-  posicoes.sort((a, b) => a.fieldId.localeCompare(b.fieldId));
+  //
+  // Collator de locale fixo, não localeCompare(): sem locale a ordem passa a
+  // depender do ICU da máquina, e "ordem estável" deixa de ser verdade entre
+  // ambientes (AGENTS.md §2.3).
+  posicoes.sort((a, b) => COLLATOR.compare(a.fieldId, b.fieldId));
 
   return posicoes;
 }
