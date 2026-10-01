@@ -82,9 +82,20 @@ RUN pnpm install --frozen-lockfile --filter "@cv-express/latex-worker..." --prod
 # é o que o cvexpress.cls exige ao carregar lmroman10/lmsans10 pelo arquivo.
 FROM debian:bookworm-slim AS latex
 
-ARG TECTONIC_VERSAO=0.15.0
+# 0.17.0, e não 0.15.0: é a versão contra a qual TUDO foi medido — as
+# coordenadas de aux.ts, o .aux copiado em aux.test.ts, o PDF de
+# paginas.test.ts e a análise dos object streams em compilar.ts. A imagem
+# fixava 0.15.0 enquanto os testes afirmavam "a mesma toolchain do worker".
+#
+# As duas pedem o mesmo bundle de TeX Live (default_bundle_v33), então zref e
+# fontes são os mesmos; o que muda é o motor e o xdvipdfmx — justamente de
+# onde saem as coordenadas e a estrutura do PDF. Medir numa versão e
+# implantar outra é o tipo de divergência que só aparece em produção.
+ARG TECTONIC_VERSAO=0.17.0
 # Fixado por conteúdo, não só por versão: uma tag do GitHub pode ser reapontada.
-ARG TECTONIC_SHA256=dfb82876f2986862996e564fa507a9e576e0c1e3bee63c2c1bd677c2543e6407
+# Calculado sobre o artefato oficial do release (o hash do 0.15.0, obtido do
+# mesmo jeito, bateu com o que estava aqui — o que confirma a origem).
+ARG TECTONIC_SHA256=8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl \
