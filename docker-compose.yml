@@ -5,17 +5,24 @@
 #  O apps/web fica FORA daqui, rodando com `pnpm dev` — hot reload em
 #  contêiner é lento e ninguém usa depois da segunda vez.
 #
-#      docker compose up -d postgres
+#      docker compose up -d --build
 #      pnpm --filter @cv-express/web dev
 #
-#  NOMEIE O SERVIÇO. `docker compose up` sem argumento tenta construir a
-#  imagem do worker, que HOJE NÃO CONSTRÓI (AGENTS.md §8: a imagem base do
-#  Tectonic responde 403 ao pull anônimo, e o estágio de build não instala as
-#  dependências de packages/db). A falha aborta a subida inteira e você fica
-#  sem nem o Postgres de pé.
+#  O web precisa destas variáveis, que batem com os serviços abaixo:
 #
-#  Enquanto isso, o worker roda direto no Node — o passo a passo está em
-#  apps/latex-worker/README.md.
+#      DATABASE_URL=postgres://cvexpress:dev@localhost:5432/cvexpress
+#      WORKER_URL=http://localhost:8080
+#      WORKER_TOKEN=token-local-nao-use-em-producao
+#
+#  A primeira construção do worker demora: o estágio 2 baixa o bundle de
+#  LaTeX do Tectonic (centenas de MB) para o cache que a imagem leva pronta.
+#  Precisa de acesso a github.com e a relay.fullyjustified.net.
+#
+#  Este cabeçalho já dizia que a imagem "HOJE NÃO CONSTRÓI" e mandava subir
+#  só o Postgres. Deixou de ser verdade no commit que trocou a imagem base
+#  pelo binário do release e restringiu o build ao subgrafo do worker — e um
+#  aviso que continua depois de a causa sumir manda gente para o caminho
+#  errado.
 #
 #  ATENÇÃO antes da primeira subida: se existir um contêiner antigo
 #  publicando a porta 5432 (ex.: `cvexpress-pg` criado na mão), remova-o —
