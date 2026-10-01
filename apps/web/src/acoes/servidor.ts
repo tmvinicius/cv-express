@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { criarConexao, type Banco } from "@cv-express/db";
 import type { HabilidadeSugerida } from "@cv-express/ai";
 import type { CvData } from "@cv-express/schema";
 
+import { obterBanco } from "./banco";
 import { salvarEtapa, apagarTudo } from "./sessao";
 import { obterServicoIa } from "./servicoIa";
 import { compilarCv } from "./compilar";
@@ -22,25 +22,17 @@ import type { ResultadoIa } from "./ia";
  * chave da IA ficam do lado do servidor, e o navegador só vê o resultado.
  */
 
-let bancoCompartilhado: Banco | null = null;
-
-async function banco(): Promise<Banco> {
-  if (bancoCompartilhado) return bancoCompartilhado;
-
-  const url = process.env["DATABASE_URL"];
-  if (!url) throw new Error("DATABASE_URL não configurada.");
-
-  bancoCompartilhado = await criarConexao(url);
-  return bancoCompartilhado;
-}
+// O pool é o mesmo das páginas — ver `banco.ts`. Ele NÃO pode ser declarado
+// aqui: todo export assíncrono de um arquivo "use server" vira Server Action,
+// isto é, um endpoint que qualquer navegador consegue chamar.
 
 export async function acaoSalvar(sessionId: string, cv: CvData): Promise<boolean> {
-  const r = await salvarEtapa(await banco(), sessionId, cv);
+  const r = await salvarEtapa(await obterBanco(), sessionId, cv);
   return r.ok;
 }
 
 export async function acaoApagarTudo(sessionId: string): Promise<boolean> {
-  const ok = await apagarTudo(await banco(), sessionId);
+  const ok = await apagarTudo(await obterBanco(), sessionId);
   revalidatePath("/");
   return ok;
 }

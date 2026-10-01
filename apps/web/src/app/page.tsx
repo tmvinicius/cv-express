@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { criarConexao } from "@cv-express/db";
+import { obterBanco } from "../acoes/banco";
 import { iniciarSessao } from "../acoes/sessao";
 
 /**
@@ -11,7 +11,6 @@ import { iniciarSessao } from "../acoes/sessao";
  */
 export const dynamic = "force-dynamic";
 
-
 /**
  * Entrada do produto: cria uma sessão anônima e redireciona.
  *
@@ -19,11 +18,7 @@ export const dynamic = "force-dynamic";
  * Cada decisão a menos antes do primeiro campo é uma desistência a menos.
  */
 export default async function Home() {
-  const url = process.env["DATABASE_URL"];
-  if (!url) throw new Error("DATABASE_URL não configurada.");
-
-  const db = await criarConexao(url);
-  const sessao = await iniciarSessao(db);
+  const sessao = await iniciarSessao(await obterBanco());
 
   redirect(`/cv/${sessao.id}`);
 }
