@@ -186,6 +186,24 @@ export const ETAPAS: readonly Etapa[] = [
   },
 ] as const;
 
+/**
+ * A string veio da URL e é mesmo uma etapa?
+ *
+ * `?etapa=` é texto que qualquer pessoa digita, cola ou guarda nos favoritos.
+ * A página fazia `etapa as IdEtapa` sem conferir, e um valor desconhecido
+ * chegava até `podeIrPara`, que lia `ETAPAS[-1].validar` e derrubava o
+ * render com erro 500. O caso mais provável nem é malícia: é o link antigo
+ * para "boas-vindas", uma etapa que existiu e foi removida.
+ */
+export function ehIdEtapa(valor: unknown): valor is IdEtapa {
+  return typeof valor === "string" && ETAPAS.some((e) => e.id === valor);
+}
+
+/** A etapa pedida na URL, ou a primeira quando o pedido não vale. */
+export function etapaDaUrl(valor: string | undefined): IdEtapa {
+  return ehIdEtapa(valor) ? valor : "pessoal";
+}
+
 export function etapaPorId(id: IdEtapa): Etapa {
   const e = ETAPAS.find((x) => x.id === id);
   if (!e) throw new Error(`Etapa desconhecida: ${id}`);

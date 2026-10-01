@@ -152,8 +152,13 @@ export function avancar(atual: IdEtapa, cv: CvData): ResultadoAvanco {
  * é imutável aqui e a navegação só muda qual etapa aparece.
  */
 export function voltar(atual: IdEtapa): IdEtapa | null {
-  const anterior = ETAPAS[indiceDa(atual) - 1];
-  return anterior?.id ?? null;
+  // "gerando" é passagem, não destino: ela compila e avança sozinha para o
+  // preview. Voltar do preview para ela devolveria a pessoa ao preview no
+  // instante seguinte — um botão Voltar que não sai do lugar. O anterior de
+  // quem está depois dela é a última etapa de preenchimento.
+  let i = indiceDa(atual) - 1;
+  while (i >= 0 && ETAPAS[i]?.id === "gerando") i--;
+  return ETAPAS[i]?.id ?? null;
 }
 
 /**

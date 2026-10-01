@@ -6,7 +6,7 @@ import {
   type CvData,
 } from "@cv-express/schema";
 
-import { ETAPAS, etapaPorId, etapaDoCampo } from "../etapas";
+import { ETAPAS, etapaPorId, etapaDoCampo, ehIdEtapa, etapaDaUrl } from "../etapas";
 import {
   avancar,
   voltar,
@@ -129,6 +129,43 @@ describe("voltar", () => {
 
     expect(cv).toEqual(copia);
     expect(cv.experiencias).toHaveLength(1);
+  });
+
+  it("do preview volta ao preenchimento, pulando 'gerando'", () => {
+    // "gerando" compila e avança sozinha para o preview. Se Voltar levasse
+    // para ela, a pessoa seria devolvida ao preview no instante seguinte —
+    // um botão que não sai do lugar.
+    expect(voltar("preview")).toBe("habilidades");
+    expect(voltar("gerando")).toBe("habilidades");
+  });
+});
+
+describe("etapa vinda da URL", () => {
+  /**
+   * `?etapa=` é texto livre. Sem esta validação, um valor desconhecido
+   * chegava a `podeIrPara`, que lia `ETAPAS[-1].validar` e derrubava a
+   * página com erro 500 — e o caso mais provável é um link antigo para
+   * "boas-vindas", etapa que existiu e foi removida.
+   */
+  it("reconhece só as etapas que existem", () => {
+    for (const e of ETAPAS) expect(ehIdEtapa(e.id)).toBe(true);
+    expect(ehIdEtapa("boas-vindas")).toBe(false);
+    expect(ehIdEtapa("")).toBe(false);
+    expect(ehIdEtapa(undefined)).toBe(false);
+    expect(ehIdEtapa("constructor")).toBe(false);
+  });
+
+  it("cai na primeira etapa quando o valor não vale", () => {
+    expect(etapaDaUrl(undefined)).toBe("pessoal");
+    expect(etapaDaUrl("boas-vindas")).toBe("pessoal");
+    expect(etapaDaUrl("../../etc")).toBe("pessoal");
+    expect(etapaDaUrl("formacao")).toBe("formacao");
+  });
+
+  it("o progresso calculado a partir dela nunca quebra", () => {
+    // O defeito original: calcularProgresso com etapa desconhecida lançava
+    // TypeError no meio do render.
+    expect(() => calcularProgresso(etapaDaUrl("boas-vindas"), novoCv("t"))).not.toThrow();
   });
 });
 
