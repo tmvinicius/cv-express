@@ -155,9 +155,37 @@ COPY --from=build --chown=cvexpress:cvexpress /app/apps/latex-worker/package.jso
 
 # O cache do Tectonic é somente leitura em execução: o contêiner não tem rede,
 # então nada novo entra, e escrita ali seria sinal de que algo está errado.
-RUN chown -R root:root /opt/tectonic-cache && chmod -R a-w /opt/tectonic-cache
+#
+# `a+rX` é a metade que faltava. O Tectonic grava o cache por arquivo
+# temporário + rename, e o temporário nasce com modo 0600 — então, populado
+# como root no estágio 2, o `.fmt` e os arquivos do bundle chegavam aqui como
+# root:root 0600. O `a-w` sozinho não devolve leitura, e cada compilação
+# morria com:
+#
+#   error: could not open format file latex
+#   caused by: Permission denied (os error 13)
+#
+# `X` maiúsculo dá execução só a diretórios (para atravessá-los), nunca aos
+# arquivos.
+RUN chown -R root:root /opt/tectonic-cache \
+ && chmod -R a+rX,a-w /opt/tectonic-cache
 
 USER cvexpress
+
+# Teste de fumaça COMO O USUÁRIO DO WORKER, com os mesmos argumentos de
+# tectonic.ts (`--only-cached`, `--reruns 1`).
+#
+# O do estágio 2 não bastava: rodava como root, com o cache gravável, e por
+# isso passou com um cache que o worker não conseguia ler. Este falha o build
+# se o usuário real não conseguir compilar — inclusive se faltar no cache
+# algum pacote, já que aqui não se baixa nada.
+COPY --chown=cvexpress:cvexpress apps/latex-worker/aquecimento.tex /tmp/fumaca/aquecimento.tex
+COPY --chown=cvexpress:cvexpress packages/templates/classico/cvexpress.cls /tmp/fumaca/cvexpress.cls
+RUN cd /tmp/fumaca \
+ && HOME=/tmp/fumaca TECTONIC_CACHE_DIR=/opt/tectonic-cache \
+    tectonic --outdir /tmp/fumaca --keep-intermediates --only-cached --reruns 1 aquecimento.tex \
+ && test -f /tmp/fumaca/aquecimento.pdf \
+ && rm -rf /tmp/fumaca
 
 # TMPDIR=/tmp, e NÃO /tmp/cvexpress.
 #
