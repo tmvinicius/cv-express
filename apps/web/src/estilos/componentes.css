@@ -1052,6 +1052,47 @@ select.campo__entrada {
   color: var(--cor-fundo);
 }
 
+/* ═══ Resultado: gerando e preview ════════════════════════════════════ */
+
+/*
+ * No celular, uma coluna: o PDF primeiro, o painel de ajustes depois. É a
+ * ordem do que a pessoa quer fazer — ver o currículo, e só então decidir se
+ * mexe em algo.
+ */
+.resultado__conteudo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-5);
+}
+
+.resultado__documento {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-3);
+  min-width: 0; /* sem isto, o iframe estoura a coluna do grid */
+}
+
+.pendencias {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.pendencias button {
+  min-height: var(--alvo-toque);
+  padding: var(--esp-2) var(--esp-4);
+  border: 1px solid var(--cor-borda-forte);
+  border-radius: var(--raio);
+  background: var(--cor-superficie-elevada);
+  color: var(--cor-primaria);
+  font-weight: var(--peso-medio);
+  text-align: left;
+}
+
+.pendencias button:hover {
+  background: var(--cor-primaria-suave);
+}
+
 /* ═══ Telas largas ════════════════════════════════════════════════════ */
 
 /*
@@ -1063,6 +1104,18 @@ select.campo__entrada {
   .formulario {
     max-width: 52rem;
     padding: var(--esp-6);
+  }
+
+  /* O preview precisa de mais largura que o formulário: um A4 espremido em
+     52rem vira texto ilegível no iframe. */
+  .formulario:has(.resultado) {
+    max-width: 72rem;
+  }
+
+  .resultado__conteudo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    align-items: start;
   }
 
   .preview__documento {
