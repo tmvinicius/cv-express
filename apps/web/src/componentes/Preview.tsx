@@ -76,11 +76,12 @@ export function Preview({
 
       {urlExibida ? (
         <>
-          <iframe
-            src={urlExibida}
-            title="Pré-visualização do seu currículo"
-            className="preview__documento"
-          />
+          {/* O download vem ANTES do documento, na ordem do DOM e não só na
+              visual. Depois de um iframe de 80vh, a ação principal da tela
+              ficava fora da primeira dobra — medido: y=1003 numa tela de
+              844px no celular — e quem não rolasse até o fim não achava onde
+              baixar. Mudar só com CSS (`order`) deixaria a ordem de
+              tabulação contrária à da tela. */}
           <a
             href={urlExibida}
             download={nomeArquivo}
@@ -88,6 +89,11 @@ export function Preview({
           >
             Baixar currículo
           </a>
+          <iframe
+            src={urlExibida}
+            title="Pré-visualização do seu currículo"
+            className="preview__documento"
+          />
         </>
       ) : (
         // Sem PDF ainda e sem erro: só a mensagem de status acima.
