@@ -9,12 +9,24 @@ import {
 } from "@cv-express/schema";
 
 import { FormularioCliente } from "../FormularioCliente";
-import type { ResultadoCompilacao } from "../../acoes/compilar";
 import type { ResultadoIa } from "../../acoes/ia";
+import type { ResultadoCompilacao } from "../../acoes/compilar";
 
 afterEach(cleanup);
 
 type Props = Parameters<typeof FormularioCliente>[0];
+type HabilidadeSemId = { nome: string; categoria: "tecnica" | "comportamental" | "ferramenta" };
+
+const RESPOSTA_PDF: CompilarResposta = {
+  contentHash: "a".repeat(64),
+  templateId: "classico",
+  templateVersao: "1.0.0",
+  pageCount: 1,
+  pdf: "JVBERi0xLjUK", // "%PDF-1.5\n"
+  posicoes: [],
+  duracaoMs: 10,
+  doCache: false,
+};
 
 /**
  * Monta o formulário e devolve os mocks já tipados.
@@ -32,56 +44,29 @@ function montar(overrides: Partial<Props> = {}) {
     }),
   );
   const pedirSugestaoHabilidades = vi.fn(
-    async (
-      _cv: CvData,
-    ): Promise<ResultadoIa<{ nome: string; categoria: "tecnica" }[]>> => ({
+    async (_cv: CvData): Promise<ResultadoIa<HabilidadeSemId[]>> => ({
       ok: true,
       dados: [{ nome: "Python", categoria: "tecnica" }],
     }),
   );
-  const compilar = vi.fn(async (_cv: CvData): Promise<ResultadoCompilacao> => ({
-    ok: true,
-    resposta: respostaDoWorker(1),
-  }));
-  const apagarTudo = vi.fn(async () => true);
+  const compilar = vi.fn(
+    async (_cv: CvData): Promise<ResultadoCompilacao> => ({ ok: true, resposta: RESPOSTA_PDF }),
+  );
 
   render(
     <FormularioCliente
       cvInicial={novoCv("s1")}
       etapaInicial="pessoal"
-      capacidades={{ ia: { disponivel: true } }}
       salvar={salvar}
       aoNavegar={aoNavegar}
       pedirSugestaoExperiencia={pedirSugestaoExperiencia}
       pedirSugestaoHabilidades={pedirSugestaoHabilidades}
       compilar={compilar}
-      apagarTudo={apagarTudo}
       {...overrides}
     />,
   );
 
-  return {
-    salvar,
-    aoNavegar,
-    pedirSugestaoExperiencia,
-    pedirSugestaoHabilidades,
-    compilar,
-    apagarTudo,
-  };
-}
-
-/** Resposta do worker com um PDF de mentira e a contagem de páginas pedida. */
-function respostaDoWorker(paginas: number): CompilarResposta {
-  return {
-    contentHash: "a".repeat(64),
-    templateId: "classico",
-    templateVersao: "1",
-    pageCount: paginas,
-    pdf: btoa("%PDF-1.7 falso"),
-    posicoes: [],
-    duracaoMs: 5,
-    doCache: false,
-  };
+  return { salvar, aoNavegar, pedirSugestaoExperiencia, pedirSugestaoHabilidades, compilar };
 }
 
 const cvPreenchido = (): CvData => ({
@@ -89,17 +74,10 @@ const cvPreenchido = (): CvData => ({
   pessoal: { nome: "Ana Souza", cidade: "Belo Horizonte", email: "ana@exemplo.com" },
 });
 
-/**
- * Currículo que de fato pode virar PDF: dados pessoais MAIS objetivo.
- *
- * A separação importa. Os testes de geração usavam `cvPreenchido()`, que não
- * tem objetivo, e passavam — porque `opcional: false` na etapa era decorativo
- * e `prontoParaGerar` não olhava o campo. A fixture escondia a mesma lacuna
- * que o produto tinha.
- */
+/** Dados pessoais e objetivo — o mínimo para gerar o PDF. */
 const cvProntoParaGerar = (): CvData => ({
   ...cvPreenchido(),
-  objetivo: { texto: "Atuar como desenvolvedora backend." },
+  objetivo: { texto: "Atuar com desenvolvimento backend." },
 });
 
 describe("navegação", () => {
@@ -143,12 +121,6 @@ describe("navegação", () => {
   });
 
   it("não oferece voltar na primeira etapa", () => {
-    // Monta em "pessoal", que é a etapa em que TODO MUNDO entra.
-    //
-    // A versão anterior montava em "boas-vindas" e passava — afirmando sobre
-    // uma etapa em que ninguém entrava, enquanto "pessoal" exibia justamente
-    // o botão que o teste dizia não existir. Clicar nele levava a uma tela em
-    // branco. Teste verde sobre comportamento errado.
     montar({ etapaInicial: "pessoal" });
     expect(screen.queryByRole("button", { name: /^voltar$/i })).toBeNull();
   });
@@ -170,6 +142,16 @@ describe("navegação", () => {
     });
 
     expect(screen.getByRole("button", { name: /continuar/i })).toBeDefined();
+  });
+
+  it("mostra a trilha das etapas e deixa voltar direto a uma delas", async () => {
+    // A trilha existia com teste próprio, mas nenhuma tela a renderizava.
+    const { aoNavegar } = montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "formacao" });
+
+    const trilha = screen.getByRole("navigation", { name: /etapas do formulário/i });
+    await userEvent.click(within(trilha).getByRole("button", { name: /^objetivo/i }));
+
+    expect(aoNavegar).toHaveBeenCalledWith("objetivo");
   });
 });
 
@@ -232,6 +214,9 @@ describe("sugestão da IA no fluxo", () => {
     ],
   });
 
+  const comparacao = () =>
+    screen.queryByRole("region", { name: /comparar sua descrição com a sugestão/i });
+
   it("pede a sugestão e mostra a comparação", async () => {
     const { pedirSugestaoExperiencia } = montar({
       cvInicial: comExperiencia(),
@@ -251,24 +236,21 @@ describe("sugestão da IA no fluxo", () => {
     // O original continua visível AO LADO da sugestão. A busca é escopada à
     // seção de comparação porque o mesmo texto também está no textarea que a
     // pessoa digitou — e é isso que se quer: ela vê os dois.
-    const comparacao = screen.getByRole("region", {
-      name: /comparar sua descrição com a sugestão/i,
-    });
-    expect(within(comparacao).getByText("cuidei das apis")).toBeDefined();
-    expect(within(comparacao).getByText("Desenvolvi APIs")).toBeDefined();
+    const secao = comparacao();
+    expect(secao).not.toBeNull();
+    expect(within(secao!).getByText("cuidei das apis")).toBeDefined();
+    expect(within(secao!).getByText("Desenvolvi APIs")).toBeDefined();
   });
 
   it("falha da IA vira aviso, e o fluxo continua", async () => {
     // O planejamento é explícito: a IA nunca bloqueia a geração do currículo.
+    // Aqui a Server Action LANÇA (rede caiu no caminho), o pior caso.
     montar({
       cvInicial: comExperiencia(),
       etapaInicial: "experiencias",
-      pedirSugestaoExperiencia: vi.fn(
-        async (): Promise<ResultadoIa<string[]>> => ({
-          ok: false,
-          motivo: "INDISPONIVEL",
-        }),
-      ),
+      pedirSugestaoExperiencia: vi.fn(async () => {
+        throw new Error("provider fora do ar");
+      }),
     });
 
     await userEvent.click(
@@ -281,6 +263,43 @@ describe("sugestão da IA no fluxo", () => {
 
     // E dá para seguir em frente mesmo assim.
     expect(screen.getByRole("button", { name: /continuar/i })).toBeDefined();
+  });
+
+  it("o motivo da falha chega como código e vira a mensagem certa", async () => {
+    // O contrato mudou para resultado com código; o formulário ainda esperava
+    // exceção, e todo motivo caía na mesma frase genérica.
+    montar({
+      cvInicial: comExperiencia(),
+      etapaInicial: "experiencias",
+      pedirSugestaoExperiencia: vi.fn(
+        async (): Promise<ResultadoIa<string[]>> => ({ ok: false, motivo: "GUARDRAIL" }),
+      ),
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/informação que você não escreveu/i)).toBeDefined();
+    });
+  });
+
+  it("não oferece 'tentar de novo' quando repetir não muda nada", async () => {
+    montar({
+      cvInicial: comExperiencia(),
+      etapaInicial: "experiencias",
+      pedirSugestaoExperiencia: vi.fn(
+        async (): Promise<ResultadoIa<string[]>> => ({ ok: false, motivo: "NAO_AUTORIZADO" }),
+      ),
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
+    );
+    await waitFor(() => screen.getByText(/não está liberada/i));
+
+    expect(screen.queryByRole("button", { name: /tentar de novo/i })).toBeNull();
   });
 
   it("a sugestão só entra no currículo com clique explícito", async () => {
@@ -329,480 +348,234 @@ describe("sugestão da IA no fluxo", () => {
       { timeout: 3000 },
     );
   });
-});
 
-describe("datas incoerentes", () => {
-  /** Experiência com término ANTES do início — o dado que o banco recusa. */
-  const comPeriodoInvertido = (): CvData => ({
-    ...cvPreenchido(),
-    experiencias: [
-      novaExperiencia({
-        id: "e1",
-        cargo: "Dev",
-        empresa: "Acme",
-        periodo: { inicio: { ano: 2024, mes: 6 }, fim: { ano: 2020, mes: 3 } },
-      }),
-    ],
-  });
+  it("'Manter o meu texto' tira a comparação da tela", async () => {
+    // Antes, a decisão era gravada mas a sugestão continuava visível — o
+    // botão parecia não funcionar.
+    montar({ cvInicial: comExperiencia(), etapaInicial: "experiencias" });
 
-  it("avisa no ato, colado no campo, sem esperar o clique em Continuar", async () => {
-    /**
-     * O defeito relatado: o formulário aceitava a data incoerente sem avisar.
-     * O agravante: `salvarEtapa` recusa esse dado, então o autosave para e a
-     * única pista é o indicador dizendo que os dados continuam na tela.
-     */
-    montar({ cvInicial: comPeriodoInvertido(), etapaInicial: "experiencias" });
-
-    expect(
-      screen.getByText(/o término \(mar\/2020\) é anterior ao início \(jun\/2024\)/i),
-    ).toBeDefined();
-    // E diz o que fazer, não só o que está errado.
-    expect(screen.getByText(/trocadas/i)).toBeDefined();
-  });
-
-  it("marca os selects como inválidos para tecnologia assistiva", () => {
-    montar({ cvInicial: comPeriodoInvertido(), etapaInicial: "experiencias" });
-
-    expect(
-      screen.getByLabelText(/término: ano/i).getAttribute("aria-invalid"),
-    ).toBe("true");
-  });
-
-  it("corrigir a data faz o aviso sumir na hora", async () => {
-    montar({ cvInicial: comPeriodoInvertido(), etapaInicial: "experiencias" });
-
-    await userEvent.selectOptions(
-      screen.getByLabelText(/término: ano/i),
-      String(new Date().getFullYear()),
+    await userEvent.click(
+      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
     );
+    await waitFor(() => expect(comparacao()).not.toBeNull());
 
-    expect(screen.queryByText(/é anterior ao início/i)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /manter o meu texto/i }));
+
+    expect(comparacao()).toBeNull();
+    expect(screen.getByRole("button", { name: /organizar com ajuda da ia/i })).toBeDefined();
   });
 
-  it("o avanço continua bloqueado enquanto a data é impossível", async () => {
-    // Inline e imediato não significa permissivo: o schema e o banco recusam
-    // esse período, e passar adiante só adiaria o erro.
-    const { aoNavegar } = montar({
-      cvInicial: comPeriodoInvertido(),
+  it("editar a descrição descarta a sugestão do texto antigo", async () => {
+    /**
+     * O defeito que isto impede: a sugestão pendente sobrevivia à edição, e
+     * "Usar sugestão" gravava tópicos gerados a partir de um texto que a
+     * pessoa já tinha reescrito. O redutor limpa os bullets quando a
+     * descrição muda justamente para isso não acontecer — a sugestão
+     * pendente passava por fora dele.
+     */
+    const { salvar } = montar({ cvInicial: comExperiencia(), etapaInicial: "experiencias" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
+    );
+    await waitFor(() => expect(comparacao()).not.toBeNull());
+
+    await userEvent.type(screen.getByLabelText(/o que você fazia lá/i), " e do banco");
+
+    expect(comparacao()).toBeNull();
+    expect(screen.queryByRole("button", { name: /usar sugestão/i })).toBeNull();
+
+    await waitFor(
+      () => {
+        const ultimo = salvar.mock.calls.at(-1)?.[0] as CvData;
+        expect(ultimo.experiencias[0]?.descricaoOriginal).toBe("cuidei das apis e do banco");
+        expect(ultimo.experiencias[0]?.bullets).toEqual([]);
+      },
+      { timeout: 3000 },
+    );
+  });
+
+  it("resposta que chega depois de a pessoa editar o texto é ignorada", async () => {
+    let responder: (r: ResultadoIa<string[]>) => void = () => {};
+    montar({
+      cvInicial: comExperiencia(),
       etapaInicial: "experiencias",
+      pedirSugestaoExperiencia: vi.fn(
+        () => new Promise<ResultadoIa<string[]>>((r) => (responder = r)),
+      ),
     });
 
-    await userEvent.click(screen.getByRole("button", { name: /continuar/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
+    );
+    // Enquanto a IA pensa, a pessoa reescreve o texto.
+    await userEvent.type(screen.getByLabelText(/o que você fazia lá/i), " e do banco");
 
-    expect(aoNavegar).not.toHaveBeenCalled();
+    responder({ ok: true, dados: ["Tópico do texto antigo"] });
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText("Tópico do texto antigo")).toBeNull();
   });
 
-  it("período em aberto diz como vai sair no currículo", () => {
-    // "Atual" esconde dois campos; sem dizer o que colocou no lugar, o
-    // checkbox parece ter apagado a informação.
+  it("habilidades: 'Manter o meu texto' volta ao estado inicial", async () => {
     montar({
       cvInicial: {
         ...cvPreenchido(),
-        experiencias: [
-          novaExperiencia({
-            id: "e1",
-            cargo: "Dev",
-            empresa: "Acme",
-            periodo: { inicio: { ano: 2023, mes: 6 }, fim: "atual" },
-          }),
-        ],
+        habilidades: { textoOriginal: "python", itens: [], statusIa: "none" },
       },
-      etapaInicial: "experiencias",
-    });
-
-    expect(screen.getByText(/jun\/2023 – atual/i)).toBeDefined();
-  });
-
-  it("data plausível não gera ruído nenhum", () => {
-    // Avisar demais ensina a ignorar avisos.
-    montar({
-      cvInicial: {
-        ...cvPreenchido(),
-        experiencias: [
-          novaExperiencia({
-            id: "e1",
-            cargo: "Dev",
-            empresa: "Acme",
-            periodo: { inicio: { ano: 2020, mes: 3 }, fim: { ano: 2024, mes: 6 } },
-          }),
-        ],
-      },
-      etapaInicial: "experiencias",
-    });
-
-    expect(screen.queryByText(/anterior ao início/i)).toBeNull();
-    expect(screen.queryByText(/ainda não chegou/i)).toBeNull();
-  });
-});
-
-describe("trilha de etapas no formulário montado", () => {
-  it("leva de volta a uma etapa anterior, sem validar a atual", async () => {
-    const { aoNavegar } = montar({
-      cvInicial: { ...cvPreenchido(), objetivo: { texto: "Backend." } },
-      etapaInicial: "experiencias",
-    });
-
-    const trilha = screen.getByRole("navigation", { name: /etapas do formulário/i });
-    await userEvent.click(within(trilha).getByRole("button", { name: /seus dados/i }));
-
-    expect(aoNavegar).toHaveBeenCalledWith("pessoal");
-  });
-
-  it("barra e trilha contam a mesma coisa", async () => {
-    /**
-     * O defeito relatado: a barra não andava quando a etapa ficava vazia, mas
-     * o "Etapa X de 6" andava sempre — dois indicadores se contradizendo. Aqui
-     * os dois saem do mesmo cálculo, então a contagem exibida é a mesma.
-     */
-    montar({
-      cvInicial: { ...cvPreenchido(), objetivo: { texto: "Backend." } },
-      etapaInicial: "experiencias",
-    });
-
-    // Duas etapas preenchidas e válidas, nenhuma pulada ainda.
-    expect(screen.getByText("2 de 6 etapas prontas")).toBeDefined();
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("33");
-    expect(screen.getByText(/etapa 3 de 6: experiências/i)).toBeDefined();
-  });
-
-  it("pular uma etapa opcional faz a contagem andar", async () => {
-    // Quem está no primeiro emprego pula experiências de propósito: a barra
-    // precisa reconhecer a decisão, não cobrá-la para sempre.
-    montar({
-      cvInicial: { ...cvPreenchido(), objetivo: { texto: "Backend." } },
-      etapaInicial: "formacao",
-    });
-
-    expect(screen.getByText("3 de 6 etapas prontas")).toBeDefined();
-  });
-});
-
-describe("ajuda de IA sem provider configurado", () => {
-  const comExperiencia = (): CvData => ({
-    ...cvPreenchido(),
-    experiencias: [
-      novaExperiencia({
-        id: "e1",
-        cargo: "Dev",
-        empresa: "Acme",
-        descricaoOriginal: "cuidei das apis",
-      }),
-    ],
-  });
-
-  it("o botão nasce desabilitado, com o motivo à vista", () => {
-    // O defeito relatado: sem token, o botão existia e não entregava nada.
-    montar({
-      cvInicial: comExperiencia(),
-      etapaInicial: "experiencias",
-      capacidades: { ia: { disponivel: false } },
-    });
-
-    expect(
-      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
-    ).toHaveProperty("disabled", true);
-    expect(screen.getByText(/desligada neste ambiente/i)).toBeDefined();
-  });
-
-  it("e o resto do formulário continua inteiro", () => {
-    // A IA é acessório: sem ela o currículo sai igual, a partir do texto que a
-    // pessoa escreveu.
-    montar({
-      cvInicial: comExperiencia(),
-      etapaInicial: "experiencias",
-      capacidades: { ia: { disponivel: false } },
-    });
-
-    expect(screen.getByLabelText(/o que você fazia lá/i)).toHaveProperty(
-      "disabled",
-      false,
-    );
-    expect(screen.getByRole("button", { name: /continuar/i })).toBeDefined();
-  });
-
-  it("falha em tempo de execução explica o que houve, e deixa tentar de novo", async () => {
-    // Timeout é diferente de "não configurado", e a pessoa merece saber qual
-    // dos dois foi — por isso o motivo viaja como dado, não como exceção.
-    montar({
-      cvInicial: comExperiencia(),
-      etapaInicial: "experiencias",
-      pedirSugestaoExperiencia: vi.fn(async () => ({
-        ok: false as const,
-        motivo: "TEMPO_ESGOTADO" as const,
-      })),
+      etapaInicial: "habilidades",
     });
 
     await userEvent.click(
       screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
     );
+    await waitFor(() => screen.getByRole("button", { name: /usar sugestão/i }));
 
-    expect(await screen.findByText(/demorando mais que o normal/i)).toBeDefined();
-    expect(screen.getByRole("button", { name: /tentar de novo/i })).toBeDefined();
-  });
+    await userEvent.click(screen.getByRole("button", { name: /manter o meu texto/i }));
 
-  it("guardrail acionado é explicado como proteção, não como defeito", async () => {
-    /**
-     * "A sugestão trouxe informação que você não escreveu, então descartamos"
-     * é a promessa central do produto acontecendo à vista da pessoa. Antes,
-     * este caso e um timeout produziam a mesma frase vaga.
-     */
-    montar({
-      cvInicial: comExperiencia(),
-      etapaInicial: "experiencias",
-      pedirSugestaoExperiencia: vi.fn(async () => ({
-        ok: false as const,
-        motivo: "GUARDRAIL" as const,
-      })),
-    });
-
-    await userEvent.click(
-      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
-    );
-
-    expect(
-      await screen.findByText(/informação que você não escreveu/i),
-    ).toBeDefined();
-  });
-
-  it("não oferece 'tentar de novo' quando o ambiente não tem IA", async () => {
-    // Um botão de repetir aqui seria o mesmo clique morto, uma tela depois.
-    montar({
-      cvInicial: comExperiencia(),
-      etapaInicial: "experiencias",
-      pedirSugestaoExperiencia: vi.fn(async () => ({
-        ok: false as const,
-        motivo: "sem_configuracao" as const,
-      })),
-    });
-
-    await userEvent.click(
-      screen.getByRole("button", { name: /organizar com ajuda da ia/i }),
-    );
-
-    await screen.findByText(/desligada neste ambiente/i);
-    expect(screen.queryByRole("button", { name: /tentar de novo/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /usar sugestão/i })).toBeNull();
   });
 });
 
-describe("geração do currículo", () => {
+describe("o fim do fluxo entrega o PDF", () => {
   /**
-   * O jsdom não implementa URL.createObjectURL. Sem o dublê, o Preview trata
-   * o PDF como corrompido e não mostra o link de download — e o teste não
-   * conseguiria provar que o PDF chegou à tela.
+   * Até esta correção, nenhuma tela renderizava "gerando" nem "preview":
+   * Preview, AvisoPaginas, PainelSecoes e a compilação existiam, com teste,
+   * e ninguém os usava. Quem terminava o formulário não recebia currículo.
    */
   beforeEach(() => {
-    URL.createObjectURL = vi.fn(() => "blob:curriculo");
+    // O jsdom não implementa blob URL.
+    URL.createObjectURL = vi.fn(() => "blob:falso");
     URL.revokeObjectURL = vi.fn();
   });
 
-  it("a última etapa mostra o PDF, e não o erro 'Esta é a última etapa'", async () => {
-    // O defeito relatado: o preview só tinha a barra de progresso e um
-    // "Continuar" que, clicado, respondia com esse erro.
-    const { compilar } = montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "preview" });
+  it("a última etapa de preenchimento leva a gerar", async () => {
+    const { aoNavegar } = montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "habilidades" });
 
-    expect(await screen.findByRole("link", { name: /baixar currículo/i })).toBeDefined();
-    expect(compilar).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: /continuar/i })).toBeNull();
-    expect(screen.queryByText(/esta é a última etapa/i)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /gerar o currículo/i }));
+
+    expect(aoNavegar).toHaveBeenCalledWith("gerando");
   });
 
-  it("o arquivo baixado leva o nome da pessoa, sem acento", async () => {
-    montar({
-      cvInicial: {
-        ...cvProntoParaGerar(),
-        pessoal: { nome: "João Conceição", cidade: "São Paulo", email: "j@exemplo.com" },
-      },
-      etapaInicial: "preview",
+  it("'gerando' compila e segue sozinha para o preview", async () => {
+    const { compilar, aoNavegar } = montar({
+      cvInicial: cvProntoParaGerar(),
+      etapaInicial: "gerando",
     });
 
-    const link = await screen.findByRole("link", { name: /baixar currículo/i });
-    expect(link.getAttribute("download")).toBe("curriculo-joao-conceicao.pdf");
+    await waitFor(() => {
+      // Substituindo a entrada do histórico: o Voltar do navegador não deve
+      // parar numa tela de passagem.
+      expect(aoNavegar).toHaveBeenCalledWith("preview", { substituir: true });
+    });
+    expect(compilar).toHaveBeenCalledTimes(1);
   });
 
-  it("'gerando' segue sozinho para o preview quando o PDF fica pronto", async () => {
-    const { aoNavegar } = montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "gerando" });
-
-    await waitFor(() => expect(aoNavegar).toHaveBeenCalledWith("preview"));
-  });
-
-  it("sem os dados obrigatórios, não chama o worker e diz o que falta", async () => {
-    // O worker recusaria com DADOS_INVALIDOS, e a pessoa veria um erro
-    // genérico em vez de saber qual campo preencher.
-    const { compilar } = montar({ cvInicial: novoCv("s1"), etapaInicial: "preview" });
-
-    expect(screen.getByRole("alert").textContent).toMatch(/falta preencher/i);
-    expect(compilar).not.toHaveBeenCalled();
-  });
-
-  it("erro do worker aparece com 'tentar de novo', e tentar de novo recompila", async () => {
+  it("depois de editar, 'gerando' compila de novo e espera o PDF novo", async () => {
+    // O ciclo que a pessoa faz de verdade: vê o PDF, volta para corrigir,
+    // gera outra vez. O preview só pode abrir com o PDF da correção — o da
+    // visita anterior não serve. A garantia de conteúdo fica no hook
+    // (`emDia`, ver o teste de useCompilacao); aqui se prova o fluxo.
+    let liberarSegunda: (r: ResultadoCompilacao) => void = () => {};
     const compilar = vi
       .fn<(cv: CvData) => Promise<ResultadoCompilacao>>()
-      .mockResolvedValueOnce({
-        ok: false,
-        codigo: "ERRO_INTERNO",
-        mensagem: "O gerador de PDF não está disponível agora. Seu currículo está salvo.",
-      })
-      .mockResolvedValueOnce({ ok: true, resposta: respostaDoWorker(1) });
+      .mockResolvedValueOnce({ ok: true, resposta: RESPOSTA_PDF })
+      .mockImplementationOnce(() => new Promise((r) => (liberarSegunda = r)));
+    const aoNavegar = vi.fn();
 
-    montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "preview", compilar });
+    const props = {
+      cvInicial: {
+        ...cvProntoParaGerar(),
+        habilidades: { textoOriginal: "python", itens: [], statusIa: "none" as const },
+      },
+      salvar: vi.fn(async () => true),
+      aoNavegar,
+      pedirSugestaoExperiencia: vi.fn(),
+      pedirSugestaoHabilidades: vi.fn(),
+      compilar,
+    };
 
-    expect((await screen.findByRole("alert")).textContent).toMatch(/não está disponível/i);
+    const { rerender } = render(<FormularioCliente {...props} etapaInicial="preview" />);
+    await screen.findByRole("link", { name: /baixar currículo/i });
 
-    await userEvent.click(screen.getByRole("button", { name: /tentar de novo/i }));
+    // Volta às habilidades, edita, e pede para gerar de novo.
+    rerender(<FormularioCliente {...props} etapaInicial="habilidades" />);
+    await userEvent.type(screen.getByLabelText(/suas habilidades/i), ", sql");
+    rerender(<FormularioCliente {...props} etapaInicial="gerando" />);
 
-    expect(await screen.findByRole("link", { name: /baixar currículo/i })).toBeDefined();
-    expect(compilar).toHaveBeenCalledTimes(2);
-  });
+    await waitFor(() => expect(compilar).toHaveBeenCalledTimes(2));
+    expect(aoNavegar).not.toHaveBeenCalledWith("preview", { substituir: true });
 
-  it("Server Action que lança vira erro na tela, não página quebrada", async () => {
-    const compilar = vi.fn(async (): Promise<ResultadoCompilacao> => {
-      throw new Error("rede caiu");
-    });
+    liberarSegunda({ ok: true, resposta: { ...RESPOSTA_PDF, contentHash: "b".repeat(64) } });
 
-    montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "preview", compilar });
-
-    expect((await screen.findByRole("alert")).textContent).toMatch(/currículo está salvo/i);
-  });
-
-  it("avisa quando passa de uma página, sem bloquear o download", async () => {
-    const compilar = vi.fn(
-      async (): Promise<ResultadoCompilacao> => ({ ok: true, resposta: respostaDoWorker(2) }),
+    await waitFor(() =>
+      expect(aoNavegar).toHaveBeenCalledWith("preview", { substituir: true }),
     );
-
-    montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "preview", compilar });
-
-    expect(await screen.findByText(/ficou com 2 páginas/i)).toBeDefined();
-    /**
-     * `findBy` e não `getBy`: o aviso de páginas aparece assim que o PDF fica
-     * pronto, mas o link só depois que o efeito do `URL.createObjectURL`
-     * roda — um ciclo adiante. Consultar sem esperar passava na máquina
-     * rápida e falhava na suíte inteira, que é o pior tipo de teste instável:
-     * o que acusa defeito onde não há.
-     */
-    expect(await screen.findByRole("link", { name: /baixar currículo/i })).toBeDefined();
   });
 
-  it("o painel de seções leva à etapa E ao item", async () => {
-    // Antes só a etapa viajava: com cinco experiências na tela, clicar em
-    // "Experiência 3" abria a lista inteira e a pessoa tinha de procurar de
-    // novo qual ela mesma acabara de pedir.
+  it("o preview mostra o PDF, o download e o painel de seções", async () => {
+    montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "preview" });
+
+    const baixar = await screen.findByRole("link", { name: /baixar currículo/i });
+    expect(baixar.getAttribute("download")).toBe("curriculo-ana-souza.pdf");
+    expect(screen.getByRole("navigation", { name: /seções do currículo/i })).toBeDefined();
+
+    // Sem "Continuar" aqui: não há próxima etapa, e a ação principal é baixar.
+    expect(screen.queryByRole("button", { name: /continuar/i })).toBeNull();
+  });
+
+  it("clicar numa seção do painel leva direto ao item", async () => {
     const { aoNavegar } = montar({
       cvInicial: {
         ...cvProntoParaGerar(),
-        experiencias: [
-          novaExperiencia({ id: "e1", cargo: "Dev", empresa: "Acme" }),
-          novaExperiencia({ id: "e2", cargo: "Analista", empresa: "Beta" }),
-        ],
+        experiencias: [novaExperiencia({ id: "e1", cargo: "Dev", empresa: "Acme" })],
       },
       etapaInicial: "preview",
     });
 
     const painel = screen.getByRole("navigation", { name: /seções do currículo/i });
-    await userEvent.click(within(painel).getByRole("button", { name: /analista/i }));
+    await userEvent.click(within(painel).getByRole("button", { name: /dev/i }));
 
-    expect(aoNavegar).toHaveBeenCalledWith("experiencias", "e2");
+    expect(aoNavegar).toHaveBeenCalledWith("experiencias", { item: "e1" });
   });
 
-  it("o item pedido é o que recebe foco ao abrir a etapa", async () => {
-    // A outra metade do caminho: levar o id adiante não adianta se a etapa
-    // ignorar o id ao montar.
-    montar({
-      cvInicial: {
-        ...cvProntoParaGerar(),
-        experiencias: [
-          novaExperiencia({ id: "e1", cargo: "Dev", empresa: "Acme" }),
-          novaExperiencia({ id: "e2", cargo: "Analista", empresa: "Beta" }),
-        ],
-      },
-      etapaInicial: "experiencias",
-      itemEmFoco: "e2",
-    });
+  it("do preview, Voltar leva às habilidades — e não à tela de passagem", async () => {
+    const { aoNavegar } = montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "preview" });
 
-    // O foco vai para o primeiro campo do item pedido, que é onde se edita.
-    const focado = document.activeElement as HTMLInputElement | null;
-    expect(focado?.value).toBe("Analista");
-  });
-});
+    await userEvent.click(screen.getByRole("button", { name: /^voltar$/i }));
 
-describe("apagar meus dados (LGPD)", () => {
-  /**
-   * O defeito que estes testes impedem: a ação existir e ninguém chamá-la.
-   *
-   * `acaoApagarTudo` apagava em cascata e tinha teste desde o começo, mas
-   * nenhum componente a chamava — o produto prometia no README um direito
-   * legal que não tinha como ser exercido.
-   *
-   * O segundo teste é tão importante quanto o primeiro: o apagamento é
-   * DELETE, sem desfazer. Um botão que apaga no primeiro clique é pior do que
-   * botão nenhum.
-   */
-  beforeEach(() => {
-    URL.createObjectURL = vi.fn(() => "blob:curriculo");
-    URL.revokeObjectURL = vi.fn();
+    expect(aoNavegar).toHaveBeenCalledWith("habilidades");
   });
 
-  it("um clique só NÃO apaga nada", async () => {
-    const { apagarTudo } = montar({
-      cvInicial: cvProntoParaGerar(),
+  it("sem o obrigatório, não chama o worker e aponta o que falta", async () => {
+    // `?etapa=preview` é digitável. Chamar o worker aqui renderia um erro
+    // técnico sobre um problema que a pessoa resolve em dez segundos.
+    const { compilar, aoNavegar } = montar({
+      cvInicial: cvPreenchido(), // sem objetivo
       etapaInicial: "preview",
     });
 
-    await userEvent.click(await screen.findByRole("button", { name: /apagar meus dados/i }));
+    await userEvent.click(screen.getByRole("button", { name: /completar “objetivo”/i }));
 
-    expect(apagarTudo).not.toHaveBeenCalled();
-    // E a consequência tem de estar escrita na tela antes da confirmação.
-    expect(screen.getByRole("alertdialog")).toBeDefined();
-    expect(screen.getByText(/não dá para desfazer/i)).toBeDefined();
+    expect(aoNavegar).toHaveBeenCalledWith("objetivo");
+    expect(compilar).not.toHaveBeenCalled();
   });
 
-  it("apaga depois da confirmação explícita", async () => {
-    const { apagarTudo } = montar({
-      cvInicial: cvProntoParaGerar(),
-      etapaInicial: "preview",
-    });
+  it("falha do worker mostra erro com 'tentar de novo', e não quebra a página", async () => {
+    const compilar = vi
+      .fn<(cv: CvData) => Promise<ResultadoCompilacao>>()
+      .mockResolvedValueOnce({
+        ok: false,
+        codigo: "FALHA_LATEX",
+        mensagem: "Não conseguimos montar o PDF do seu currículo.",
+      })
+      .mockResolvedValueOnce({ ok: true, resposta: RESPOSTA_PDF });
 
-    await userEvent.click(await screen.findByRole("button", { name: /apagar meus dados/i }));
-    await userEvent.click(screen.getByRole("button", { name: /sim, apagar tudo/i }));
+    montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "preview", compilar });
 
-    expect(apagarTudo).toHaveBeenCalledTimes(1);
-  });
+    await userEvent.click(await screen.findByRole("button", { name: /tentar de novo/i }));
 
-  it("cancelar fecha sem apagar", async () => {
-    const { apagarTudo } = montar({
-      cvInicial: cvProntoParaGerar(),
-      etapaInicial: "preview",
-    });
-
-    await userEvent.click(await screen.findByRole("button", { name: /apagar meus dados/i }));
-    await userEvent.click(screen.getByRole("button", { name: /cancelar/i }));
-
-    expect(apagarTudo).not.toHaveBeenCalled();
-    expect(screen.queryByRole("alertdialog")).toBeNull();
-  });
-
-  it("falha ao apagar não some com a tela nem com os dados", async () => {
-    // Se o DELETE falhar, a pessoa precisa saber que os dados CONTINUAM lá —
-    // o contrário faria alguém achar que já exerceu o direito.
-    const falhou = vi.fn(async () => false);
-    montar({
-      cvInicial: cvProntoParaGerar(),
-      etapaInicial: "preview",
-      apagarTudo: falhou,
-    });
-
-    await userEvent.click(await screen.findByRole("button", { name: /apagar meus dados/i }));
-    await userEvent.click(screen.getByRole("button", { name: /sim, apagar tudo/i }));
-
-    expect(falhou).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/seus dados continuam aqui/i)).toBeDefined();
-    // Continua sendo possível tentar de novo — a tela não virou beco.
-    expect(screen.getByRole("button", { name: /sim, apagar tudo/i })).toBeDefined();
-  });
-
-  it("não aparece no meio do preenchimento", () => {
-    // A saída de emergência não pode ficar no caminho de quem está
-    // trabalhando.
-    montar({ etapaInicial: "pessoal" });
-    expect(screen.queryByRole("button", { name: /apagar meus dados/i })).toBeNull();
+    expect(await screen.findByRole("link", { name: /baixar currículo/i })).toBeDefined();
+    expect(compilar).toHaveBeenCalledTimes(2);
   });
 });

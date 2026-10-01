@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
-import { criarConexao } from "@cv-express/db";
+import { obterBanco } from "../../../acoes/banco";
 import { carregarSessao } from "../../../acoes/sessao";
 import { capacidadesDoAmbiente } from "../../../acoes/capacidades";
-import type { IdEtapa } from "../../../formulario/etapas";
+import { etapaDaUrl } from "../../../formulario/etapas";
 import { PaginaCliente } from "./PaginaCliente";
 
 /**
@@ -27,11 +27,7 @@ export default async function PaginaFormulario({
   const { id } = await params;
   const { etapa, item } = await searchParams;
 
-  const url = process.env["DATABASE_URL"];
-  if (!url) throw new Error("DATABASE_URL não configurada.");
-
-  const db = await criarConexao(url);
-  const sessao = await carregarSessao(db, id);
+  const sessao = await carregarSessao(await obterBanco(), id);
 
   // Sessão expirada e sessão inexistente são a mesma coisa para quem acessa:
   // não existe currículo nesse endereço.
@@ -41,7 +37,9 @@ export default async function PaginaFormulario({
     <PaginaCliente
       sessionId={id}
       cvInicial={sessao.data}
-      etapaInicial={(etapa ?? "pessoal") as IdEtapa}
+      /* Validada, e não convertida com `as`: um valor desconhecido (um link
+         antigo para "boas-vindas", por exemplo) derrubava o render com 500. */
+      etapaInicial={etapaDaUrl(etapa)}
       /* `?item=` diz QUAL item da lista abrir. Vem do painel de seções e das
          sugestões de corte, que sabem exatamente de qual item falam. */
       itemEmFoco={item}
