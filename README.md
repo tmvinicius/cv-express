@@ -52,7 +52,7 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 | Composição     | LaTeX via Tectonic                    | Engine moderna, ~200 MB, sem instalar TeX Live inteiro            |
 | Worker         | Fastify 5                             |                                                                   |
 | IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
-| Testes         | Vitest 2, Testing Library, PGlite     | 667 testes; o banco de teste é Postgres de verdade, em memória    |
+| Testes         | Vitest 2, Testing Library, PGlite     | 691 testes; o banco de teste é Postgres de verdade, em memória    |
 | Ids            | nanoid                                | Ids estáveis por item de lista                                    |
 
 Sem Handlebars, sem LangChain. Cada dependência ausente foi uma decisão, não um
@@ -108,11 +108,11 @@ Isso roda build, typecheck, lint e testes, nessa ordem. O esperado:
 packages/schema        38 testes
 packages/templates     99 testes
 packages/ai            77 testes
-packages/db            43 testes
+packages/db            56 testes
 apps/latex-worker      51 testes
-apps/web              359 testes
+apps/web              370 testes
 ─────────────────────────────────
-total                 667 testes
+total                 691 testes
 ```
 
 O build vem antes porque os pacotes se importam via `dist/` — um build velho
@@ -190,11 +190,36 @@ Não há `.env.example`; estas são todas as que o código lê.
 | `RESEND_API_KEY`    | com `resend` | Chave da API do Resend                                      |
 | `EMAIL_REMETENTE`   | com `resend` | Ex.: `CV Express <nao-responda@seudominio.com.br>`, de domínio verificado no Resend |
 | `APP_URL`           | em produção | Endereço público do app; base do link do e-mail. Em desenvolvimento, `http://localhost:3000` |
+| `CRON_SECRET`       | em produção | Segredo do expurgo diário. Sem ele, a rota de expurgo recusa (503) e nada é apagado |
 
 Sem e-mail configurado, o botão "Concluir e salvar" aparece desligado, com o
 motivo escrito; o resto do fluxo, inclusive o download, funciona normalmente.
 O link do e-mail é montado sempre a partir de `APP_URL`, nunca do cabeçalho
 `Host` da requisição, que quem faz a requisição controla.
+
+O "Concluir e salvar" tem três limites de envio, contados no próprio
+Postgres: 5 links por currículo, 10 e-mails por hora por IP e 3 por dia para
+o mesmo destinatário. "Já enviado" não conta. Quem esbarra no limite lê que o
+currículo está salvo e que pode tentar daqui a pouco.
+
+### Expurgo diário
+
+Currículos vencidos (rascunho sem uso há 30 dias, ou concluído há mais de 5)
+e contadores de limite antigos são apagados por
+`GET /api/tarefas/expurgo`, com `Authorization: Bearer <CRON_SECRET>`.
+
+**Na Vercel**, o agendamento já está em `apps/web/vercel.json` (todo dia às
+06:00 UTC, 03:00 em Brasília): basta definir `CRON_SECRET` no projeto, e a
+Vercel envia o cabeçalho sozinha.
+
+**Fora da Vercel**, qualquer agendador serve — um `cron` do sistema, uma
+tarefa agendada da plataforma:
+
+```bash
+curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://SEU-APP/api/tarefas/expurgo
+```
+
+A resposta diz quantos foram apagados, e o mesmo número vai para o log.
 
 Sem chave configurada, pedir sugestão à IA falha — e o formulário segue com o
 texto que a pessoa escreveu. É o comportamento pretendido: a IA nunca bloqueia
@@ -241,15 +266,17 @@ no servidor, como deve.
 | `packages/templates` — escape, motor, template, fixtures  | ✅ 99 testes                         |
 | `packages/i18n` — rótulos pt-BR                           | ✅                                   |
 | `packages/ai` — serviço, adapters, guardrails             | ✅ 77 testes, só contra o mock       |
-| `packages/db` — sessões, link mágico, compilações         | ✅ 43 testes, contra Postgres real   |
+| `packages/db` — sessões, link mágico, compilações         | ✅ 56 testes, contra Postgres real   |
 | `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 51 testes                         |
 | `apps/web` — 6 etapas, trilha, autosave, sugestões de IA  | ✅ roda localmente                   |
-| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 359 testes no app; fluxo verificado no navegador |
+| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 370 testes no app; fluxo verificado no navegador |
 | Compilação real `.tex → PDF`                              | ✅ verificada com Tectonic 0.17.0    |
 | Imagem Docker do worker com 0.17.0                        | ⚠️ nunca construída                 |
 | Tela "gerando" com narração em etapas                     | ⚠️ status único, sem narração        |
 | Botão "apagar meus dados" (LGPD)                          | ⚠️ ação pronta, sem botão            |
 | "Concluir e salvar" — e-mail com link de 5 dias           | ✅ verificado no navegador, com e-mail no modo `console` |
+| Limite de envio por IP e por destinatário                 | ✅ verificado no navegador e em Postgres real |
+| Expurgo diário agendado                                   | ✅ rota verificada; agendamento da Vercel nunca executado |
 | Envio real pelo Resend                                    | ⚠️ nunca executado                  |
 
 ## Decisões que valem saber de antemão

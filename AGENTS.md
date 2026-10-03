@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar            # build + typecheck + lint + testes — 667 testes
+pnpm run verificar            # build + typecheck + lint + testes — 691 testes
 pnpm run verificar:completo   # o mesmo + build do worker e `next build`
 ```
 
@@ -135,6 +135,9 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Sessões, link mágico, registro de compilações | `packages/db/src/` |
 | Regra do "Concluir e salvar" (prazo de 5 dias, link reutilizável) | `packages/db/src/linkMagico.ts` |
 | Envio de e-mail (Resend, console) e o texto do e-mail | `apps/web/src/email/` |
+| Limite de envio (contador no Postgres) | `packages/db/src/limites.ts` |
+| Quantos e-mails por IP e por destinatário | `apps/web/src/acoes/concluir.ts` (`LIMITE_POR_*`) |
+| Expurgo diário: o que apaga / quem chama | `packages/db/src/expurgo.ts` / `apps/web/src/app/api/tarefas/expurgo/` + `apps/web/vercel.json` |
 | A ação "Concluir e salvar" e o destino do link | `apps/web/src/acoes/concluir.ts`, `apps/web/src/app/retomar/[token]/` |
 | Quais etapas existem, validação e progresso | `apps/web/src/formulario/etapas.ts`, `maquina.ts` |
 | Toda mudança no `CvData` feita pelo formulário | `apps/web/src/formulario/reducer.ts` |
@@ -185,6 +188,20 @@ o prazo que a pessoa leu no e-mail deixa de ser verdade. E `concluirSessao`
 usa `FOR UPDATE`: o teste dele no PGlite passa mesmo sem a trava (uma conexão
 só), então não a remova por isso — sem ela, medido em Postgres real, 10
 cliques simultâneos dispararam 5 e-mails.
+
+**Limite de envio:** o limite é aplicado DENTRO de `concluirSessao`, pelo
+`permitirEnvio`, e só quando um e-mail novo vai sair. Não o mova para antes
+(um "já enviado" gastaria cota) nem para depois (um envio bloqueado já teria
+disparado o prazo de 5 dias). O IP vem do `x-forwarded-for`, que na Vercel é
+escrito pela plataforma; atrás de outro proxy, confirme que ele SOBRESCREVE
+o cabeçalho, senão o cliente escolhe o próprio IP. E, como o `FOR UPDATE`,
+a atomicidade do contador não é provada pelo PGlite — foi medida em
+Postgres real (0 de 20 rodadas de 50 pedidos simultâneos passaram do teto).
+
+**Rotas e o link do e-mail:** a página do link mora em
+`app/retomar/[token]/`, porque é o caminho que `concluir.ts` põe no e-mail.
+Ela já foi parar em `app/cv/retomar/`, o build quebrou e todo link enviado
+daria 404; há teste amarrando os dois agora.
 
 **Sugestão da IA pendente:** o estado da sugestão vive no
 `FormularioCliente`, fora do redutor, e morre junto com o texto que a
@@ -334,13 +351,6 @@ leva direto ao item. O que ainda falta:
 - **O botão "apagar meus dados" na tela.** A ação `acaoApagarTudo`, o
   componente `ApagarMeusDados` e o CSS existem; nenhuma tela renderiza o
   componente.
-- **O expurgo diário agendado.** `expurgarExpiradas` existe e tem teste, mas
-  nada o chama. Sessão vencida fica inacessível — link, `/cv/<id>` e
-  gravação recusam —, só que a linha continua no banco. Por isso o e-mail diz
-  que o currículo "deixa de ficar disponível", e não que é apagado.
-- **Limite de envio por IP.** O "Concluir e salvar" tem teto de 5 links por
-  sessão, mas quem cria sessões novas pode disparar e-mails para endereços
-  arbitrários. Antes de abrir ao público, ponha limite por IP na frente.
 - **Script de migração e `.env.example`.** As migrações se aplicam à mão com
   `psql` (ou sozinhas na primeira subida do compose); as variáveis de
   ambiente estão listadas no `README.md`.
