@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import type { HabilidadeSugerida } from "@cv-express/ai";
 import type { CvData } from "@cv-express/schema";
 
@@ -8,7 +9,7 @@ import { obterBanco } from "./banco";
 import { salvarEtapa, apagarTudo } from "./sessao";
 import { obterServicoIa } from "./servicoIa";
 import { compilarCv } from "./compilar";
-import { concluirESalvar, type ResultadoConcluir } from "./concluir";
+import { concluirESalvar, origemDoPedido, type ResultadoConcluir } from "./concluir";
 import { configuracaoEmail } from "../email/envio";
 import * as ia from "./ia";
 import type { ResultadoIa } from "./ia";
@@ -38,7 +39,13 @@ export async function acaoSalvar(sessionId: string, cv: CvData): Promise<boolean
  * lê a configuração do e-mail, que depende do ambiente do servidor.
  */
 export async function acaoConcluir(sessionId: string, cv: CvData): Promise<ResultadoConcluir> {
-  return concluirESalvar(await obterBanco(), sessionId, cv, configuracaoEmail());
+  return concluirESalvar(
+    await obterBanco(),
+    sessionId,
+    cv,
+    configuracaoEmail(),
+    origemDoPedido(await headers()),
+  );
 }
 
 export async function acaoApagarTudo(sessionId: string): Promise<boolean> {

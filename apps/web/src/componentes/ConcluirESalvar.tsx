@@ -21,6 +21,10 @@ const MENSAGENS: Record<Motivo, string> = {
     "Este currículo não está mais disponível para edição — o prazo pode ter terminado.",
   limite_de_envios:
     "Já enviamos o link várias vezes para este currículo. Confira a caixa de entrada e o spam do último e-mail informado.",
+  // Sem dizer o limite nem de onde ele vem: para quem só está concluindo o
+  // próprio currículo, basta saber que é passageiro e que nada se perdeu.
+  muitos_envios:
+    "Muitos envios em pouco tempo. Seu currículo está salvo; tente de novo daqui a pouco.",
   falha_envio:
     "Não conseguimos enviar o e-mail agora. Seu currículo está salvo; tente de novo em instantes.",
 };
