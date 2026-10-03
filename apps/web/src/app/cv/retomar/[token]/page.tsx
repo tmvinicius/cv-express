@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { resgatarLinkMagico } from "@cv-express/db";
 import Link from "next/link";
-import { obterBanco } from "../../../acoes/banco";
+import { obterBanco } from "../../../../acoes/banco";
 
 /**
  * O destino do link do e-mail: `/retomar/<token>`.
