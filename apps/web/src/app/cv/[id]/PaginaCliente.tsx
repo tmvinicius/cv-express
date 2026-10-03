@@ -13,6 +13,7 @@ import type { Capacidades } from "../../../acoes/capacidades";
 import {
   acaoSalvar,
   acaoCompilar,
+  acaoConcluir,
   acaoPolirExperiencia,
   acaoNormalizarHabilidades,
 } from "../../../acoes/servidor";
@@ -34,12 +35,15 @@ export function PaginaCliente({
   etapaInicial,
   itemEmFoco,
   capacidades,
+  prazo,
 }: {
   sessionId: string;
   cvInicial: CvData;
   etapaInicial: IdEtapa;
   itemEmFoco?: string | undefined;
   capacidades: Capacidades;
+  /** ISO do prazo de edição, se o currículo já foi concluído. */
+  prazo: string | null;
 }) {
   const router = useRouter();
 
@@ -60,6 +64,7 @@ export function PaginaCliente({
     (cv: CvData, id: string) => acaoPolirExperiencia(sessionId, cv, id),
     [sessionId],
   );
+  const concluir = useCallback((cv: CvData) => acaoConcluir(sessionId, cv), [sessionId]);
   const normalizar = useCallback(
     (cv: CvData) => acaoNormalizarHabilidades(sessionId, cv),
     [sessionId],
@@ -76,6 +81,9 @@ export function PaginaCliente({
       pedirSugestaoExperiencia={polir}
       pedirSugestaoHabilidades={normalizar}
       compilar={acaoCompilar}
+      concluir={concluir}
+      emailDisponivel={capacidades.email.disponivel}
+      prazoInicial={prazo}
     />
   );
 }

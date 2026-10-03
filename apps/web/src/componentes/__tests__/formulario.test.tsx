@@ -11,6 +11,7 @@ import {
 import { FormularioCliente } from "../FormularioCliente";
 import type { ResultadoIa } from "../../acoes/ia";
 import type { ResultadoCompilacao } from "../../acoes/compilar";
+import type { ResultadoConcluir } from "../../acoes/concluir";
 
 afterEach(cleanup);
 
@@ -49,6 +50,14 @@ function montar(overrides: Partial<Props> = {}) {
       dados: [{ nome: "Python", categoria: "tecnica" }],
     }),
   );
+  const concluir = vi.fn(
+    async (_cv: CvData): Promise<ResultadoConcluir> => ({
+      ok: true,
+      envio: "novo",
+      email: "ana@exemplo.com",
+      expiraEm: "2026-10-08T17:30:00.000Z",
+    }),
+  );
   const compilar = vi.fn(
     async (_cv: CvData): Promise<ResultadoCompilacao> => ({ ok: true, resposta: RESPOSTA_PDF }),
   );
@@ -62,11 +71,19 @@ function montar(overrides: Partial<Props> = {}) {
       pedirSugestaoExperiencia={pedirSugestaoExperiencia}
       pedirSugestaoHabilidades={pedirSugestaoHabilidades}
       compilar={compilar}
+      concluir={concluir}
       {...overrides}
     />,
   );
 
-  return { salvar, aoNavegar, pedirSugestaoExperiencia, pedirSugestaoHabilidades, compilar };
+  return {
+    salvar,
+    aoNavegar,
+    pedirSugestaoExperiencia,
+    pedirSugestaoHabilidades,
+    compilar,
+    concluir,
+  };
 }
 
 const cvPreenchido = (): CvData => ({
@@ -493,6 +510,7 @@ describe("o fim do fluxo entrega o PDF", () => {
       pedirSugestaoExperiencia: vi.fn(),
       pedirSugestaoHabilidades: vi.fn(),
       compilar,
+      concluir: vi.fn(),
     };
 
     const { rerender } = render(<FormularioCliente {...props} etapaInicial="preview" />);
@@ -577,5 +595,116 @@ describe("o fim do fluxo entrega o PDF", () => {
 
     expect(await screen.findByRole("link", { name: /baixar currículo/i })).toBeDefined();
     expect(compilar).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("concluir e salvar", () => {
+  /**
+   * O botão depois do sexto passo: grava a versão da tela e manda um link
+   * para o e-mail do currículo, válido por 5 dias que editar não renova.
+   */
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => "blob:falso");
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  it("aparece no preview e envia a versão que está na tela", async () => {
+    const { concluir } = montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "preview" });
+
+    await userEvent.click(screen.getByRole("button", { name: /^concluir e salvar$/i }));
+
+    expect(concluir).toHaveBeenCalledTimes(1);
+    expect((concluir.mock.calls[0]?.[0] as CvData).pessoal.nome).toBe("Ana Souza");
+
+    // O e-mail e o prazo, por escrito — inclusive a regra que surpreende.
+    const status = await screen.findByText(/enviamos para/i);
+    expect(status.textContent).toContain("ana@exemplo.com");
+    expect(status.textContent).toContain("quinta-feira, 08/10, às 14:30");
+    expect(status.textContent).toMatch(/editar\s+não muda esse prazo/);
+  });
+
+  it("depois de concluir, o prazo passa a aparecer no cabeçalho", async () => {
+    montar({ cvInicial: cvProntoParaGerar(), etapaInicial: "preview" });
+
+    await userEvent.click(screen.getByRole("button", { name: /^concluir e salvar$/i }));
+
+    expect(await screen.findByText(/disponível para edição até/i)).toBeDefined();
+  });
+
+  it("quem volta pelo link vê o prazo enquanto edita, em qualquer etapa", () => {
+    montar({
+      cvInicial: cvProntoParaGerar(),
+      etapaInicial: "experiencias",
+      prazoInicial: "2026-10-08T17:30:00.000Z",
+    });
+
+    expect(
+      screen.getByText(/disponível para edição até quinta-feira, 08\/10, às 14:30/i),
+    ).toBeDefined();
+  });
+
+  it("concluir de novo diz que o link anterior continua valendo", async () => {
+    montar({
+      cvInicial: cvProntoParaGerar(),
+      etapaInicial: "preview",
+      prazoInicial: "2026-10-08T17:30:00.000Z",
+      concluir: vi.fn(
+        async (): Promise<ResultadoConcluir> => ({
+          ok: true,
+          envio: "ja_enviado",
+          email: "ana@exemplo.com",
+          expiraEm: "2026-10-08T17:30:00.000Z",
+        }),
+      ),
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /^concluir e salvar$/i }));
+
+    expect(await screen.findByText(/continua valendo/i)).toBeDefined();
+  });
+
+  it("sem e-mail configurado, o botão nasce desligado e diz por quê", () => {
+    montar({
+      cvInicial: cvProntoParaGerar(),
+      etapaInicial: "preview",
+      emailDisponivel: false,
+    });
+
+    expect(
+      screen.getByRole("button", { name: /^concluir e salvar$/i }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.getByText(/envio de e-mail está desligado/i)).toBeDefined();
+  });
+
+  it("e-mail inválido oferece o caminho para corrigir", async () => {
+    const { aoNavegar } = montar({
+      cvInicial: cvProntoParaGerar(),
+      etapaInicial: "preview",
+      concluir: vi.fn(
+        async (): Promise<ResultadoConcluir> => ({ ok: false, motivo: "dados_incompletos" }),
+      ),
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /^concluir e salvar$/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /corrigir o e-mail/i }));
+
+    expect(aoNavegar).toHaveBeenCalledWith("pessoal");
+  });
+
+  it("falha de rede vira mensagem, e o botão continua lá para tentar de novo", async () => {
+    montar({
+      cvInicial: cvProntoParaGerar(),
+      etapaInicial: "preview",
+      concluir: vi.fn(async () => {
+        throw new Error("rede caiu");
+      }),
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /^concluir e salvar$/i }));
+
+    expect(await screen.findByText(/não conseguimos enviar o e-mail agora/i)).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: /^concluir e salvar$/i }).hasAttribute("disabled"),
+    ).toBe(false);
   });
 });

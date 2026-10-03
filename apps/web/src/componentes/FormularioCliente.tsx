@@ -14,6 +14,8 @@ import {
 } from "../formulario/etapas";
 import { avancar, voltar, calcularProgresso } from "../formulario/maquina";
 import type { ResultadoIa } from "../acoes/ia";
+import type { ResultadoConcluir } from "../acoes/concluir";
+import { formatarPrazo } from "../formulario/prazo";
 import type { Compilar } from "../preview/useCompilacao";
 
 import { BarraProgresso } from "./BarraProgresso";
@@ -26,6 +28,7 @@ import { Formacao } from "./etapas/Formacao";
 import { Idiomas } from "./etapas/Idiomas";
 import { Habilidades, type EstadoHabilidades } from "./etapas/Habilidades";
 import { Resultado } from "./etapas/Resultado";
+import { ConcluirESalvar } from "./ConcluirESalvar";
 import type { EstadoSugestao } from "./AprovacaoIa";
 import { mensagemDeFalhaIa, podeTentarDeNovo } from "./mensagensIa";
 
@@ -57,6 +60,12 @@ export interface FormularioClienteProps {
   pedirSugestaoHabilidades: (cv: CvData) => Promise<ResultadoIa<HabilidadeSemId[]>>;
   /** Obrigatória: sem ela o formulário não tem como entregar o PDF. */
   compilar: Compilar;
+  /** "Concluir e salvar": grava, fixa o prazo e envia o link por e-mail. */
+  concluir: (cv: CvData) => Promise<ResultadoConcluir>;
+  /** O servidor consegue enviar e-mail? */
+  emailDisponivel?: boolean;
+  /** ISO do prazo, quando o currículo já foi concluído (veio pelo link). */
+  prazoInicial?: string | null;
 }
 
 /**
@@ -76,8 +85,12 @@ export function FormularioCliente({
   pedirSugestaoExperiencia,
   pedirSugestaoHabilidades,
   compilar,
+  concluir,
+  emailDisponivel = true,
+  prazoInicial = null,
 }: FormularioClienteProps) {
   const [cv, despachar] = useReducer(reduzir, cvInicial);
+  const [prazo, setPrazo] = useState<string | null>(prazoInicial);
   const [erros, setErros] = useState<string[]>([]);
 
   const [sugestoes, setSugestoes] = useState<Record<string, EstadoSugestao>>({});
@@ -238,6 +251,14 @@ export function FormularioCliente({
         <BarraProgresso progresso={progresso} />
         <TrilhaEtapas progresso={progresso} aoEscolher={irParaEtapa} />
         <IndicadorAutosave estado={estadoAutosave} />
+        {/* Em todas as etapas, e não só no preview: quem volta pelo link está
+            editando contra um prazo que não renova, e precisa vê-lo enquanto
+            edita. */}
+        {prazo && (
+          <p className="formulario__prazo">
+            Disponível para edição até {formatarPrazo(prazo)} (horário de Brasília).
+          </p>
+        )}
       </header>
 
       <main className="formulario__conteudo">
@@ -280,6 +301,15 @@ export function FormularioCliente({
             aoGerar={aoGerar}
             aoIrParaCampo={irParaCampo}
             aoIrParaEtapa={irParaEtapa}
+            conclusao={
+              <ConcluirESalvar
+                disponivel={emailDisponivel}
+                prazo={prazo}
+                aoConcluir={() => concluir(cv)}
+                aoConcluido={setPrazo}
+                aoCorrigirEmail={() => irParaEtapa("pessoal")}
+              />
+            }
           />
         )}
       </main>

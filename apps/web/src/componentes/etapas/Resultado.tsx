@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { CvData } from "@cv-express/schema";
 
 import { ETAPAS, type IdEtapa } from "../../formulario/etapas";
@@ -34,6 +34,7 @@ export function Resultado({
   aoGerar,
   aoIrParaCampo,
   aoIrParaEtapa,
+  conclusao,
 }: {
   cv: CvData;
   etapa: "gerando" | "preview";
@@ -43,6 +44,11 @@ export function Resultado({
   /** Leva a um campo ou item — vem do painel de seções e das sugestões de corte. */
   aoIrParaCampo: (fieldId: string) => void;
   aoIrParaEtapa: (etapa: IdEtapa) => void;
+  /**
+   * O "Concluir e salvar", logo abaixo do título do preview. Vem pronto do
+   * formulário, que é quem tem o estado da conclusão.
+   */
+  conclusao?: ReactNode;
 }) {
   const { pronto } = prontoParaGerar(cv);
 
@@ -78,6 +84,8 @@ export function Resultado({
   return (
     <div className="etapa resultado">
       <h2>Seu currículo está pronto</h2>
+
+      {conclusao}
 
       <div className="resultado__conteudo">
         <div className="resultado__documento">

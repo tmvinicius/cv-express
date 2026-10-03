@@ -47,6 +47,8 @@ export default async function PaginaFormulario({
          se a ajuda da IA funciona, e o botão não pisca de habilitado para
          desabilitado. Só o booleano atravessa — a chave não. */
       capacidades={capacidadesDoAmbiente()}
+      /* Só o prazo atravessa — nunca o e-mail guardado na sessão nem o link. */
+      prazo={sessao.concluidoEm ? sessao.expiraEm.toISOString() : null}
     />
   );
 }
