@@ -8,6 +8,8 @@ import { obterBanco } from "./banco";
 import { salvarEtapa, apagarTudo } from "./sessao";
 import { obterServicoIa } from "./servicoIa";
 import { compilarCv } from "./compilar";
+import { concluirESalvar, type ResultadoConcluir } from "./concluir";
+import { configuracaoEmail } from "../email/envio";
 import * as ia from "./ia";
 import type { ResultadoIa } from "./ia";
 
@@ -29,6 +31,14 @@ import type { ResultadoIa } from "./ia";
 export async function acaoSalvar(sessionId: string, cv: CvData): Promise<boolean> {
   const r = await salvarEtapa(await obterBanco(), sessionId, cv);
   return r.ok;
+}
+
+/**
+ * "Concluir e salvar". A lógica e os testes estão em `concluir.ts`; aqui só se
+ * lê a configuração do e-mail, que depende do ambiente do servidor.
+ */
+export async function acaoConcluir(sessionId: string, cv: CvData): Promise<ResultadoConcluir> {
+  return concluirESalvar(await obterBanco(), sessionId, cv, configuracaoEmail());
 }
 
 export async function acaoApagarTudo(sessionId: string): Promise<boolean> {
