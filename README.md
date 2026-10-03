@@ -52,7 +52,7 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 | Composição     | LaTeX via Tectonic                    | Engine moderna, ~200 MB, sem instalar TeX Live inteiro            |
 | Worker         | Fastify 5                             |                                                                   |
 | IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
-| Testes         | Vitest 2, Testing Library, PGlite     | 621 testes; o banco de teste é Postgres de verdade, em memória    |
+| Testes         | Vitest 2, Testing Library, PGlite     | 667 testes; o banco de teste é Postgres de verdade, em memória    |
 | Ids            | nanoid                                | Ids estáveis por item de lista                                    |
 
 Sem Handlebars, sem LangChain. Cada dependência ausente foi uma decisão, não um
@@ -108,11 +108,11 @@ Isso roda build, typecheck, lint e testes, nessa ordem. O esperado:
 packages/schema        38 testes
 packages/templates     99 testes
 packages/ai            77 testes
-packages/db            35 testes
+packages/db            43 testes
 apps/latex-worker      51 testes
-apps/web              321 testes
+apps/web              359 testes
 ─────────────────────────────────
-total                 621 testes
+total                 667 testes
 ```
 
 O build vem antes porque os pacotes se importam via `dist/` — um build velho
@@ -151,6 +151,7 @@ DATABASE_URL=postgres://cvexpress:dev@localhost:5432/cvexpress \
 WORKER_URL=http://localhost:8080 \
 WORKER_TOKEN=token-local-nao-use-em-producao \
 AI_PROVIDER=mock \
+EMAIL_PROVIDER=console \
 pnpm run dev
 ```
 
@@ -158,7 +159,9 @@ Abra `http://localhost:3000`. A página inicial cria uma sessão anônima e
 redireciona para `/cv/<id>`, onde começa o formulário. Depois de habilidades,
 "Gerar meu currículo" compila o PDF e abre o preview com o download.
 
-`AI_PROVIDER=mock` faz os botões de sugestão funcionarem sem chave de API.
+`AI_PROVIDER=mock` faz os botões de sugestão funcionarem sem chave de API, e
+`EMAIL_PROVIDER=console` escreve no terminal o e-mail do "Concluir e salvar",
+com o link — abra-o no navegador para testar a volta ao currículo.
 Para usar a IA de verdade, veja as variáveis abaixo.
 
 **Sem Docker**, qualquer Postgres 16 serve: aplique a migração com
@@ -183,6 +186,15 @@ Não há `.env.example`; estas são todas as que o código lê.
 | `AI_SUPORTE_JSON`   | não         | `nativo` (padrão), `modo_json` ou `nenhum` — só `openai-compativel` |
 | `WORKER_URL`        | para gerar o PDF | Endereço do latex-worker                                   |
 | `WORKER_TOKEN`      | para gerar o PDF | Token compartilhado com o worker; o mesmo `WORKER_TOKEN` dele |
+| `EMAIL_PROVIDER`    | para "Concluir e salvar" | `resend` ou `console` (só fora de produção: escreve o e-mail no log) |
+| `RESEND_API_KEY`    | com `resend` | Chave da API do Resend                                      |
+| `EMAIL_REMETENTE`   | com `resend` | Ex.: `CV Express <nao-responda@seudominio.com.br>`, de domínio verificado no Resend |
+| `APP_URL`           | em produção | Endereço público do app; base do link do e-mail. Em desenvolvimento, `http://localhost:3000` |
+
+Sem e-mail configurado, o botão "Concluir e salvar" aparece desligado, com o
+motivo escrito; o resto do fluxo, inclusive o download, funciona normalmente.
+O link do e-mail é montado sempre a partir de `APP_URL`, nunca do cabeçalho
+`Host` da requisição, que quem faz a requisição controla.
 
 Sem chave configurada, pedir sugestão à IA falha — e o formulário segue com o
 texto que a pessoa escreveu. É o comportamento pretendido: a IA nunca bloqueia
@@ -229,15 +241,16 @@ no servidor, como deve.
 | `packages/templates` — escape, motor, template, fixtures  | ✅ 99 testes                         |
 | `packages/i18n` — rótulos pt-BR                           | ✅                                   |
 | `packages/ai` — serviço, adapters, guardrails             | ✅ 77 testes, só contra o mock       |
-| `packages/db` — sessões, link mágico, compilações         | ✅ 35 testes, contra Postgres real   |
+| `packages/db` — sessões, link mágico, compilações         | ✅ 43 testes, contra Postgres real   |
 | `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 51 testes                         |
 | `apps/web` — 6 etapas, trilha, autosave, sugestões de IA  | ✅ roda localmente                   |
-| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 321 testes no app; fluxo verificado no navegador |
+| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 359 testes no app; fluxo verificado no navegador |
 | Compilação real `.tex → PDF`                              | ✅ verificada com Tectonic 0.17.0    |
 | Imagem Docker do worker com 0.17.0                        | ⚠️ nunca construída                 |
 | Tela "gerando" com narração em etapas                     | ⚠️ status único, sem narração        |
 | Botão "apagar meus dados" (LGPD)                          | ⚠️ ação pronta, sem botão            |
-| Envio do e-mail do link mágico                            | ❌ não começou                       |
+| "Concluir e salvar" — e-mail com link de 5 dias           | ✅ verificado no navegador, com e-mail no modo `console` |
+| Envio real pelo Resend                                    | ⚠️ nunca executado                  |
 
 ## Decisões que valem saber de antemão
 
@@ -262,8 +275,11 @@ número inventado, habilidade que não estava no texto — são verificadas em
 código, não confiadas ao prompt: trocar para um modelo menor não afrouxa
 nenhuma delas.
 
-**Sem conta, sem senha.** A sessão é anônima; o link mágico é o único jeito de
-retomá-la. O banco guarda só o hash do token, que é de uso único e vale 7 dias.
+**Sem conta, sem senha.** A sessão é anônima. Ao clicar "Concluir e salvar",
+a pessoa recebe no e-mail do currículo um link para voltar e editar. O link
+vale por 5 dias a partir da primeira conclusão, pode ser usado quantas vezes
+ela quiser, e **o prazo não renova**: editar, voltar pelo link ou concluir de
+novo não compram dias a mais. O banco guarda só o hash do token.
 
 **A idade é coletada e nunca impressa.** Decisão de produto da V1, aplicada
 estruturalmente: a idade nem entra no ViewModel, então não chega ao PDF nem por

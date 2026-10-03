@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar            # build + typecheck + lint + testes — 621 testes
+pnpm run verificar            # build + typecheck + lint + testes — 667 testes
 pnpm run verificar:completo   # o mesmo + build do worker e `next build`
 ```
 
@@ -133,6 +133,9 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Provider de IA e variáveis `AI_*` | `packages/ai/src/config.ts` |
 | Tabelas e migração | `packages/db/src/esquema.ts`, `packages/db/migrations/` |
 | Sessões, link mágico, registro de compilações | `packages/db/src/` |
+| Regra do "Concluir e salvar" (prazo de 5 dias, link reutilizável) | `packages/db/src/linkMagico.ts` |
+| Envio de e-mail (Resend, console) e o texto do e-mail | `apps/web/src/email/` |
+| A ação "Concluir e salvar" e o destino do link | `apps/web/src/acoes/concluir.ts`, `apps/web/src/app/retomar/[token]/` |
 | Quais etapas existem, validação e progresso | `apps/web/src/formulario/etapas.ts`, `maquina.ts` |
 | Toda mudança no `CvData` feita pelo formulário | `apps/web/src/formulario/reducer.ts` |
 | Quando e como o autosave dispara | `apps/web/src/formulario/useAutosave.ts` |
@@ -173,6 +176,15 @@ erro tratados por exceções que cheguem à tela.
 é um `Pool` novo, e as páginas re-renderizam a cada troca de etapa. Medido:
 180 carregamentos derrubaram o Postgres com `too many clients already`; com o
 pool compartilhado, o mesmo teste fica em 3 conexões.
+
+**Prazo da sessão concluída:** depois de "Concluir e salvar", a sessão expira
+em `concluidoEm` + 5 dias e NADA renova esse prazo — nem ler, nem salvar, nem
+resgatar o link, nem concluir de novo. `buscarSessao` e `salvarCv` respeitam
+isso; uma função nova que mexa em `expiraEm` precisa respeitar também, senão
+o prazo que a pessoa leu no e-mail deixa de ser verdade. E `concluirSessao`
+usa `FOR UPDATE`: o teste dele no PGlite passa mesmo sem a trava (uma conexão
+só), então não a remova por isso — sem ela, medido em Postgres real, 10
+cliques simultâneos dispararam 5 e-mails.
 
 **Sugestão da IA pendente:** o estado da sugestão vive no
 `FormularioCliente`, fora do redutor, e morre junto com o texto que a
@@ -286,7 +298,7 @@ e, junto, a lista de commits sugeridos (arquivos → mensagem).
 
 ## 6. Divergir do planejamento é permitido
 
-Três decisões deste código contrariam o documento de planejamento, todas de
+Quatro decisões deste código contrariam o documento de planejamento, todas de
 propósito e todas registradas no comentário do arquivo:
 
 1. **`FieldId` por id estável**, não por índice (`campo.ts`) — índice é
@@ -297,6 +309,10 @@ propósito e todas registradas no comentário do arquivo:
    interno da biblioteca, que poderia reverter em silêncio para o padrão
    inseguro.
 3. **Worker recebe `CvData`**, não `.tex` (`worker.ts`) — ver invariante 2.2.
+4. **Link mágico reutilizável por 5 dias**, não de uso único por 7
+   (`linkMagico.ts`) — regra do mantenedor: o mesmo link serve quantas vezes
+   a pessoa quiser até o prazo. O custo (um e-mail encaminhado é uma chave até
+   o prazo) e o que o limita estão no comentário do arquivo.
 
 O padrão a seguir: divergir quando houver motivo forte, **registrar a
 divergência no código, no ponto onde ela vive**, e dizer ao mantenedor. O que
@@ -315,13 +331,19 @@ leva direto ao item. O que ainda falta:
 
 - **A narração da tela "gerando".** O planejamento pede mensagens em etapas
   ("Organizando suas experiências…"); hoje ela mostra um status único.
-- **O botão "apagar meus dados".** A ação `acaoApagarTudo` e o CSS
-  (`.apagar*` em `componentes.css`) existem; nenhum componente os usa.
-- **Envio do e-mail do link mágico.** `packages/db` gera o token, guarda só o
-  hash e faz o resgate de uso único. Nada envia o e-mail, e o web ainda não
-  oferece o link.
-- **Script de migração e `.env.example`.** A migração se aplica à mão com
-  `psql`; as variáveis de ambiente estão listadas no `README.md`.
+- **O botão "apagar meus dados" na tela.** A ação `acaoApagarTudo`, o
+  componente `ApagarMeusDados` e o CSS existem; nenhuma tela renderiza o
+  componente.
+- **O expurgo diário agendado.** `expurgarExpiradas` existe e tem teste, mas
+  nada o chama. Sessão vencida fica inacessível — link, `/cv/<id>` e
+  gravação recusam —, só que a linha continua no banco. Por isso o e-mail diz
+  que o currículo "deixa de ficar disponível", e não que é apagado.
+- **Limite de envio por IP.** O "Concluir e salvar" tem teto de 5 links por
+  sessão, mas quem cria sessões novas pode disparar e-mails para endereços
+  arbitrários. Antes de abrir ao público, ponha limite por IP na frente.
+- **Script de migração e `.env.example`.** As migrações se aplicam à mão com
+  `psql` (ou sozinhas na primeira subida do compose); as variáveis de
+  ambiente estão listadas no `README.md`.
 
 ## 8. A dívida que você precisa saber
 
