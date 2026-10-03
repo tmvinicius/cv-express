@@ -5,6 +5,7 @@ import {
   timestamp,
   integer,
   index,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import type { CvData } from "@cv-express/schema";
 
@@ -148,4 +149,21 @@ export const compileJobs = pgTable(
   (t) => [index("idx_compile_jobs_sessao_hash").on(t.sessionId, t.contentHash)],
 );
 
-export const esquema = { cvSessions, magicLinks, compileJobs };
+/**
+ * Contadores do limite de envio (ver `limites.ts`). A chave já chega com hash:
+ * nem IP nem e-mail ficam em claro aqui.
+ */
+export const limitesEnvio = pgTable(
+  "limites_envio",
+  {
+    chave: text("chave").notNull(),
+    janelaInicio: timestamp("janela_inicio", { withTimezone: true }).notNull(),
+    contagem: integer("contagem").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.chave, t.janelaInicio] }),
+    index("idx_limites_envio_janela").on(t.janelaInicio),
+  ],
+);
+
+export const esquema = { cvSessions, magicLinks, compileJobs, limitesEnvio };

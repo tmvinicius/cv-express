@@ -2,6 +2,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { and, count, eq, gt, isNull } from "drizzle-orm";
 import { magicLinks, cvSessions } from "./esquema.js";
 import type { Banco } from "./conexao.js";
+import type { Executor } from "./limites.js";
 
 /**
  * Link mágico: voltar ao currículo concluído sem senha.
@@ -89,7 +90,20 @@ export type ResultadoConclusao =
   | { ok: true; envio: "novo"; token: string; expiraEm: Date }
   /** Este endereço já recebeu o link, que continua valendo. Nada a enviar. */
   | { ok: true; envio: "ja_enviado"; expiraEm: Date }
-  | { ok: false; motivo: "sessao_inexistente" | "limite_de_envios" };
+  | { ok: false; motivo: "sessao_inexistente" | "limite_de_envios" | "envio_bloqueado" };
+
+export interface OpcoesConclusao {
+  /**
+   * Chamado só quando um e-mail NOVO vai sair, dentro da transação e antes de
+   * qualquer escrita. Devolver `false` cancela a conclusão inteira.
+   *
+   * É onde o app aplica o limite por IP e por destinatário. O lugar é
+   * deliberado: antes, um "já enviado" (que não manda nada) gastaria cota;
+   * depois, um envio bloqueado já teria disparado o prazo de 5 dias de uma
+   * sessão para a qual nenhum link saiu.
+   */
+  permitirEnvio?: (tx: Executor) => Promise<boolean>;
+}
 
 /**
  * "Concluir e salvar": fixa o prazo da sessão e prepara o link.
@@ -118,6 +132,7 @@ export async function concluirSessao(
   sessionId: string,
   email: string,
   agora: Date = new Date(),
+  opcoes: OpcoesConclusao = {},
 ): Promise<ResultadoConclusao> {
   return db.transaction(async (tx): Promise<ResultadoConclusao> => {
     const [sessao] = await tx
@@ -159,6 +174,10 @@ export async function concluirSessao(
 
     if ((contagem?.total ?? 0) >= MAXIMO_LINKS_POR_SESSAO) {
       return { ok: false, motivo: "limite_de_envios" };
+    }
+
+    if (opcoes.permitirEnvio && !(await opcoes.permitirEnvio(tx))) {
+      return { ok: false, motivo: "envio_bloqueado" };
     }
 
     await tx

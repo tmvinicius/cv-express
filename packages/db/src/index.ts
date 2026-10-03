@@ -11,3 +11,5 @@ export * from "./conexao.js";
 export * from "./sessoes.js";
 export * from "./linkMagico.js";
 export * from "./jobs.js";
+export * from "./limites.js";
+export * from "./expurgo.js";
