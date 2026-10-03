@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import {
@@ -11,7 +13,12 @@ import {
 } from "@cv-express/db";
 import { novoCv, type CvData } from "@cv-express/schema";
 
-import { concluirESalvar } from "../concluir";
+import {
+  concluirESalvar,
+  origemDoPedido,
+  LIMITE_POR_ORIGEM,
+  LIMITE_POR_DESTINATARIO,
+} from "../concluir";
 import { iniciarSessao, carregarSessao } from "../sessao";
 import type { ConfiguracaoEmail, MensagemEmail, ResultadoEnvio } from "../../email/envio";
 
@@ -28,6 +35,7 @@ afterEach(async () => {
 });
 
 const DIA = 24 * 60 * 60 * 1000;
+const IP = "203.0.113.7";
 
 /** Enviador de mentira que guarda o que "mandou". */
 function caixaDeSaida(resposta: ResultadoEnvio = { ok: true }) {
@@ -69,7 +77,7 @@ describe("concluir e salvar", () => {
     const { config, enviados } = caixaDeSaida();
     const agora = new Date("2026-10-03T12:00:00Z");
 
-    const r = await concluirESalvar(db, id, cv, config, agora);
+    const r = await concluirESalvar(db, id, cv, config, IP, agora);
 
     expect(r).toEqual({
       ok: true,
@@ -93,7 +101,7 @@ describe("concluir e salvar", () => {
     const { id, cv } = await cvPronto();
     const { config, enviados } = caixaDeSaida();
 
-    const r = await concluirESalvar(db, id, cv, config);
+    const r = await concluirESalvar(db, id, cv, config, IP);
 
     expect(JSON.stringify(r)).not.toContain(tokenDo(enviados[0]));
   });
@@ -105,9 +113,9 @@ describe("concluir e salvar", () => {
     const hoje = new Date("2026-10-03T12:00:00Z");
     const amanha = new Date(hoje.getTime() + DIA);
 
-    const primeira = await concluirESalvar(db, id, cv, config, hoje);
+    const primeira = await concluirESalvar(db, id, cv, config, IP, hoje);
     const editado = { ...cv, objetivo: { texto: "Objetivo revisto amanhã." } };
-    const segunda = await concluirESalvar(db, id, editado, config, amanha);
+    const segunda = await concluirESalvar(db, id, editado, config, IP, amanha);
 
     expect(enviados).toHaveLength(1);
     expect(segunda.ok && segunda.envio).toBe("ja_enviado");
@@ -125,7 +133,7 @@ describe("concluir e salvar", () => {
     // link vai sair.
     const { id, cv } = await cvPronto();
 
-    expect(await concluirESalvar(db, id, cv, null)).toEqual({
+    expect(await concluirESalvar(db, id, cv, null, IP)).toEqual({
       ok: false,
       motivo: "sem_configuracao",
     });
@@ -138,7 +146,7 @@ describe("concluir e salvar", () => {
     const { config, enviados } = caixaDeSaida();
     const semEmail = { ...cv, pessoal: { ...cv.pessoal, email: "" } };
 
-    expect(await concluirESalvar(db, id, semEmail, config)).toEqual({
+    expect(await concluirESalvar(db, id, semEmail, config, IP)).toEqual({
       ok: false,
       motivo: "dados_incompletos",
     });
@@ -149,7 +157,7 @@ describe("concluir e salvar", () => {
     const { id, cv } = await cvPronto();
     const falha = caixaDeSaida({ ok: false, motivo: "recusado" });
 
-    expect(await concluirESalvar(db, id, cv, falha.config)).toEqual({
+    expect(await concluirESalvar(db, id, cv, falha.config, IP)).toEqual({
       ok: false,
       motivo: "falha_envio",
     });
@@ -161,7 +169,7 @@ describe("concluir e salvar", () => {
 
     // Sem a revogação, este clique responderia "já enviamos".
     const ok = caixaDeSaida();
-    const r = await concluirESalvar(db, id, cv, ok.config);
+    const r = await concluirESalvar(db, id, cv, ok.config, IP);
     expect(r.ok && r.envio).toBe("novo");
     expect(ok.enviados).toHaveLength(1);
   });
@@ -177,7 +185,7 @@ describe("concluir e salvar", () => {
       },
     };
 
-    expect(await concluirESalvar(db, id, cv, config)).toEqual({
+    expect(await concluirESalvar(db, id, cv, config, IP)).toEqual({
       ok: false,
       motivo: "falha_envio",
     });
@@ -187,9 +195,120 @@ describe("concluir e salvar", () => {
     const { cv } = await cvPronto();
     const { config } = caixaDeSaida();
 
-    expect(await concluirESalvar(db, "nao-existe", cv, config)).toEqual({
+    expect(await concluirESalvar(db, "nao-existe", cv, config, IP)).toEqual({
       ok: false,
       motivo: "sessao_ausente",
     });
+  });
+});
+
+describe("limite de envio", () => {
+  /** Uma sessão nova pronta para concluir, com o e-mail pedido. */
+  async function outraSessao(email: string) {
+    const { id, cv } = await cvPronto();
+    return { id, cv: { ...cv, pessoal: { ...cv.pessoal, email } } };
+  }
+
+  it("por origem: sessões novas do mesmo IP param no limite da hora", async () => {
+    // O abuso que o teto por sessão não pegava: criar sessão nova a cada
+    // envio para disparar e-mail a endereços quaisquer.
+    const { config, enviados } = caixaDeSaida();
+    const agora = new Date("2026-10-05T10:15:00Z");
+
+    const resultados = [];
+    for (let i = 0; i <= LIMITE_POR_ORIGEM.maximo; i++) {
+      const { id, cv } = await outraSessao(`alvo${i}@exemplo.com`);
+      resultados.push(await concluirESalvar(db, id, cv, config, IP, agora));
+    }
+
+    expect(enviados).toHaveLength(LIMITE_POR_ORIGEM.maximo);
+    expect(resultados.at(-1)).toEqual({ ok: false, motivo: "muitos_envios" });
+
+    // Outro IP, na mesma hora, segue normal.
+    const { id, cv } = await outraSessao("legitimo@exemplo.com");
+    const r = await concluirESalvar(db, id, cv, config, "198.51.100.1", agora);
+    expect(r.ok).toBe(true);
+  });
+
+  it("por destinatário: muitas origens mirando a MESMA caixa", async () => {
+    const { config, enviados } = caixaDeSaida();
+    const agora = new Date("2026-10-05T10:15:00Z");
+
+    const resultados = [];
+    for (let i = 0; i <= LIMITE_POR_DESTINATARIO.maximo; i++) {
+      const { id, cv } = await outraSessao("vitima@exemplo.com");
+      resultados.push(await concluirESalvar(db, id, cv, config, `198.51.100.${i}`, agora));
+    }
+
+    expect(enviados).toHaveLength(LIMITE_POR_DESTINATARIO.maximo);
+    expect(resultados.at(-1)).toEqual({ ok: false, motivo: "muitos_envios" });
+  });
+
+  it("bloqueado, o currículo continua salvo e o prazo não começa", async () => {
+    const { config } = caixaDeSaida();
+    const agora = new Date("2026-10-05T10:15:00Z");
+    for (let i = 0; i < LIMITE_POR_ORIGEM.maximo; i++) {
+      const s = await outraSessao(`x${i}@exemplo.com`);
+      await concluirESalvar(db, s.id, s.cv, config, IP, agora);
+    }
+
+    const { id, cv } = await outraSessao("ana@exemplo.com");
+    const editado = { ...cv, objetivo: { texto: "Versão final." } };
+    expect(await concluirESalvar(db, id, editado, config, IP, agora)).toEqual({
+      ok: false,
+      motivo: "muitos_envios",
+    });
+
+    const salva = await carregarSessao(db, id, agora);
+    expect(salva?.data.objetivo.texto).toBe("Versão final.");
+    expect(salva?.concluidoEm).toBeNull();
+  });
+
+  it("concluir de novo ('já enviado') não gasta cota", async () => {
+    const { id, cv } = await cvPronto();
+    const { config } = caixaDeSaida();
+    const agora = new Date("2026-10-05T10:15:00Z");
+
+    for (let i = 0; i < 20; i++) {
+      const r = await concluirESalvar(db, id, cv, config, IP, agora);
+      expect(r.ok).toBe(true);
+    }
+  });
+});
+
+describe("origem do pedido", () => {
+  const h = (valores: Record<string, string>) => new Headers(valores);
+
+  it("usa o primeiro endereço do x-forwarded-for", () => {
+    expect(origemDoPedido(h({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }))).toBe("203.0.113.7");
+  });
+
+  it("cai para x-real-ip", () => {
+    expect(origemDoPedido(h({ "x-real-ip": "203.0.113.8" }))).toBe("203.0.113.8");
+  });
+
+  it("sem cabeçalho, todos dividem a mesma origem — o limite aperta, não some", () => {
+    expect(origemDoPedido(h({}))).toBe("desconhecida");
+    expect(origemDoPedido(h({ "x-forwarded-for": " " }))).toBe("desconhecida");
+  });
+});
+
+describe("o link do e-mail aponta para uma rota que existe", () => {
+  /**
+   * O defeito que isto impede aconteceu de verdade: a página foi parar em
+   * `app/cv/retomar/[token]/`, a rota virou `/cv/retomar/<token>`, e o
+   * e-mail continuava mandando `/retomar/<token>` — todo link enviado dava
+   * 404, com a suíte verde. O caminho do link e o do arquivo andam juntos.
+   */
+  it("o link usa /retomar/ e a página mora em app/retomar/[token]", async () => {
+    const { id, cv } = await cvPronto();
+    const { config, enviados } = caixaDeSaida();
+    await concluirESalvar(db, id, cv, config, IP);
+
+    const caminho = new URL(enviados[0]!.texto.match(/https?:\/\/\S+/)![0]).pathname;
+    expect(caminho).toMatch(/^\/retomar\/[A-Za-z0-9_-]{43}$/);
+
+    const pagina = join(__dirname, "..", "..", "app", "retomar", "[token]", "page.tsx");
+    expect(existsSync(pagina)).toBe(true);
   });
 });
