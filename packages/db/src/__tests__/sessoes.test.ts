@@ -10,7 +10,7 @@ import {
   apagarSessao,
   expurgarExpiradas,
 } from "../sessoes.js";
-import { criarLinkMagico } from "../linkMagico.js";
+import { concluirSessao, PRAZO_APOS_CONCLUSAO_MS } from "../linkMagico.js";
 import { registrarJob } from "../jobs.js";
 import { cvSessions, magicLinks, compileJobs } from "../esquema.js";
 import { VALIDADE_SESSAO_MS } from "../linkMagico.js";
@@ -147,6 +147,16 @@ describe("retenção por acesso, não por criação", () => {
     expect(await ctx.db.select().from(cvSessions)).toHaveLength(1);
   });
 
+  it("salvar em sessão vencida devolve false e não a ressuscita", async () => {
+    // Antes, a gravação filtrava só pelo id: uma aba aberta depois do prazo
+    // gravava e ainda empurrava a validade 30 dias para a frente.
+    const sessao = await criarSessao(ctx.db);
+    const depoisDaValidade = daquiA(VALIDADE_SESSAO_MS + 1000);
+
+    expect(await salvarCv(ctx.db, sessao.id, sessao.data, depoisDaValidade)).toBe(false);
+    expect(await buscarSessao(ctx.db, sessao.id, depoisDaValidade)).toBeNull();
+  });
+
   it("salvar em sessão inexistente devolve false, sem lançar", async () => {
     // O autosave roda em segundo plano; aba esquecida aberta por semanas é
     // cenário esperado.
@@ -155,11 +165,50 @@ describe("retenção por acesso, não por criação", () => {
   });
 });
 
+describe("sessão concluída tem prazo fixo", () => {
+  /**
+   * Depois de "Concluir e salvar", o prazo é o que a pessoa leu no e-mail:
+   * 5 dias a partir da conclusão. Nem abrir nem editar o currículo o estende.
+   */
+  it("buscar não renova", async () => {
+    const sessao = await criarSessao(ctx.db);
+    await concluirSessao(ctx.db, sessao.id, "ana@exemplo.com");
+    const [antes] = await ctx.db.select().from(cvSessions);
+
+    const lida = await buscarSessao(ctx.db, sessao.id, daquiA(2 * 24 * 60 * 60 * 1000));
+
+    expect(lida!.expiraEm.getTime()).toBe(antes!.expiraEm.getTime());
+    const [depois] = await ctx.db.select().from(cvSessions);
+    expect(depois!.expiraEm.getTime()).toBe(antes!.expiraEm.getTime());
+  });
+
+  it("salvar grava o conteúdo e não renova", async () => {
+    const agora = new Date();
+    const sessao = await criarSessao(ctx.db, agora);
+    await concluirSessao(ctx.db, sessao.id, "ana@exemplo.com", agora);
+
+    const editado = { ...sessao.data, objetivo: { texto: "Editado pelo link." } };
+    expect(await salvarCv(ctx.db, sessao.id, editado, daquiA(24 * 60 * 60 * 1000))).toBe(true);
+
+    const [linha] = await ctx.db.select().from(cvSessions);
+    expect(linha!.data.objetivo.texto).toBe("Editado pelo link.");
+    expect(linha!.expiraEm.getTime()).toBe(agora.getTime() + PRAZO_APOS_CONCLUSAO_MS);
+  });
+
+  it("o rascunho, sem conclusão, continua renovando por 30 dias", async () => {
+    // A regra antiga não muda para quem ainda não concluiu.
+    const sessao = await criarSessao(ctx.db);
+    const daqui10Dias = daquiA(10 * 24 * 60 * 60 * 1000);
+    const lida = await buscarSessao(ctx.db, sessao.id, daqui10Dias);
+    expect(lida!.expiraEm.getTime()).toBe(daqui10Dias.getTime() + VALIDADE_SESSAO_MS);
+  });
+});
+
 describe("apagar meus dados agora", () => {
   /** O botão exigido pela LGPD (seção 5.3). */
   it("leva sessão, links e jobs juntos", async () => {
     const sessao = await criarSessao(ctx.db);
-    await criarLinkMagico(ctx.db, sessao.id, "ana@exemplo.com");
+    await concluirSessao(ctx.db, sessao.id, "ana@exemplo.com");
     await registrarJob(ctx.db, {
       sessionId: sessao.id,
       contentHash: "abc",

@@ -1,4 +1,4 @@
-import { eq, lt } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { novoCv, type CvData } from "@cv-express/schema";
 import { cvSessions } from "./esquema.js";
@@ -21,6 +21,8 @@ export interface Sessao {
   criadoEm: Date;
   atualizadoEm: Date;
   expiraEm: Date;
+  /** Quando a pessoa clicou "Concluir e salvar" pela primeira vez. */
+  concluidoEm: Date | null;
 }
 
 export async function criarSessao(
@@ -69,11 +71,17 @@ export async function buscarSessao(
   if (!linha) return null;
   if (linha.expiraEm.getTime() <= agora.getTime()) return null;
 
+  // Sessão concluída tem prazo FIXO: ler não renova. É o prazo que a pessoa
+  // leu no e-mail, e acessar o currículo não pode comprar dias a mais.
+  if (linha.concluidoEm !== null) return linha as Sessao;
+
+  // `concluido_em IS NULL` também na cláusula: se a conclusão acontecer entre
+  // a leitura acima e esta escrita, a renovação não a desfaz.
   const novaValidade = new Date(agora.getTime() + VALIDADE_SESSAO_MS);
   await db
     .update(cvSessions)
     .set({ expiraEm: novaValidade, atualizadoEm: agora })
-    .where(eq(cvSessions.id, id));
+    .where(and(eq(cvSessions.id, id), isNull(cvSessions.concluidoEm)));
 
   return { ...linha, expiraEm: novaValidade, atualizadoEm: agora } as Sessao;
 }
@@ -84,6 +92,15 @@ export async function buscarSessao(
  * Devolve `false` quando a sessão não existe ou expirou, em vez de lançar:
  * o autosave roda em segundo plano e uma aba esquecida aberta por semanas é
  * cenário esperado, não excepcional.
+ *
+ * Duas regras que o prazo de 5 dias depende delas:
+ *
+ * - Sessão VENCIDA não aceita gravação. Antes, a cláusula era só o id: uma
+ *   aba aberta depois do prazo gravava e ainda empurrava a validade 30 dias
+ *   para a frente — ressuscitando, até o expurgo, um currículo que já devia
+ *   ter acabado.
+ * - Sessão CONCLUÍDA grava sem renovar. O `CASE` decide no banco, na mesma
+ *   instrução, para não haver janela entre ler o estado e escrever.
  */
 export async function salvarCv(
   db: Banco,
@@ -91,14 +108,18 @@ export async function salvarCv(
   data: CvData,
   agora: Date = new Date(),
 ): Promise<boolean> {
+  const renovada = new Date(agora.getTime() + VALIDADE_SESSAO_MS).toISOString();
+
   const afetadas = await db
     .update(cvSessions)
     .set({
       data,
       atualizadoEm: agora,
-      expiraEm: new Date(agora.getTime() + VALIDADE_SESSAO_MS),
+      expiraEm: sql`CASE WHEN ${cvSessions.concluidoEm} IS NULL
+                      THEN ${renovada}::timestamptz
+                      ELSE ${cvSessions.expiraEm} END`,
     })
-    .where(eq(cvSessions.id, id))
+    .where(and(eq(cvSessions.id, id), gt(cvSessions.expiraEm, agora)))
     .returning({ id: cvSessions.id });
 
   return afetadas.length > 0;

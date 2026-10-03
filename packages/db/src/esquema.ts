@@ -43,13 +43,23 @@ export const cvSessions = pgTable(
       .defaultNow(),
 
     /**
-     * Retenção: 30 dias SEM ACESSO, não 30 dias desde a criação.
+     * Retenção, com duas regras:
      *
-     * A diferença importa para quem volta ao currículo toda semana: renovar a
-     * validade a cada acesso é o comportamento que a pessoa espera, e apagar
-     * o trabalho de alguém que está usando o produto seria um defeito grave.
+     * - RASCUNHO (`concluidoEm` nulo): 30 dias SEM ACESSO, renovados a cada
+     *   leitura e gravação. Apagar o trabalho de alguém que está usando o
+     *   produto seria um defeito grave.
+     * - CONCLUÍDO: fixo em `concluidoEm` + 5 dias. Não renova com acesso nem
+     *   com edição — é o prazo que a pessoa leu no e-mail.
      */
     expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
+
+    /**
+     * Quando a pessoa clicou "Concluir e salvar" pela PRIMEIRA vez.
+     *
+     * Nunca é sobrescrito: é a âncora do prazo de 5 dias. Concluir de novo,
+     * depois de editar pelo link, salva o conteúdo sem mexer no prazo.
+     */
+    concluidoEm: timestamp("concluido_em", { withTimezone: true }),
   },
   (t) => [index("idx_cv_sessions_expira_em").on(t.expiraEm)],
 );
@@ -76,10 +86,21 @@ export const magicLinks = pgTable(
       .references(() => cvSessions.id, { onDelete: "cascade" }),
 
     criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
+
+    /**
+     * O link vale até aqui — o MESMO instante do prazo da sessão concluída.
+     * Ele não tem validade própria: link e currículo terminam juntos.
+     */
     expiraEm: timestamp("expira_em", { withTimezone: true }).notNull(),
 
-    /** Uso único: preenchido no primeiro resgate. */
-    usadoEm: timestamp("usado_em", { withTimezone: true }),
+    /** Último resgate. Só registro; o link é reutilizável até `expiraEm`. */
+    ultimoUsoEm: timestamp("ultimo_uso_em", { withTimezone: true }),
+
+    /**
+     * Deixou de valer antes do prazo: um link novo foi para outro e-mail, ou
+     * o envio deste falhou. Link revogado não volta a valer.
+     */
+    revogadoEm: timestamp("revogado_em", { withTimezone: true }),
   },
   (t) => [
     index("idx_magic_links_session").on(t.sessionId),
