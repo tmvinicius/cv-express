@@ -136,6 +136,12 @@ export const PARES: readonly ParDeContraste[] = [
   { nome: "primária sobre superfície", frente: "primaria", fundo: "superficie", uso: "textoNormal" },
   { nome: "texto sobre primária (botão)", frente: "fundo", fundo: "primaria", uso: "textoNormal" },
   { nome: "primária sobre primária suave", frente: "primaria", fundo: "primariaSuave", uso: "textoNormal" },
+  // A caixa "Concluir e salvar" tem fundo primária suave e leva explicação,
+  // confirmação e erro. É ali que está escrito o prazo de 5 dias — o texto
+  // que a pessoa mais precisa conseguir ler nesta tela.
+  { nome: "texto suave sobre primária suave", frente: "textoSuave", fundo: "primariaSuave", uso: "textoNormal" },
+  { nome: "sucesso sobre primária suave", frente: "sucesso", fundo: "primariaSuave", uso: "textoNormal" },
+  { nome: "erro sobre primária suave", frente: "erro", fundo: "primariaSuave", uso: "textoNormal" },
 
   { nome: "erro sobre fundo", frente: "erro", fundo: "fundo", uso: "textoNormal" },
   // Botão "Sim, apagar tudo": o único preenchido com a cor de erro. Entra na
