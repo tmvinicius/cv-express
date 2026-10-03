@@ -1,4 +1,5 @@
 import { capacidadeIa, type Ambiente } from "@cv-express/ai";
+import { configuracaoEmail } from "../email/envio";
 
 /**
  * O que este servidor consegue fazer.
@@ -22,6 +23,8 @@ import { capacidadeIa, type Ambiente } from "@cv-express/ai";
  */
 export interface Capacidades {
   ia: { disponivel: boolean };
+  /** Dá para enviar o link do "Concluir e salvar"? */
+  email: { disponivel: boolean };
 }
 
 /**
@@ -39,5 +42,8 @@ export interface Capacidades {
  * alguém de fato tenta usar a IA: é ali que ele ajuda a diagnosticar.
  */
 export function capacidadesDoAmbiente(env: Ambiente = process.env): Capacidades {
-  return { ia: { disponivel: capacidadeIa(env).disponivel } };
+  return {
+    ia: { disponivel: capacidadeIa(env).disponivel },
+    email: { disponivel: configuracaoEmail(env) !== null },
+  };
 }
