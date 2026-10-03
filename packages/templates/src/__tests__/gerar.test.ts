@@ -3,6 +3,7 @@ import { gerarTex } from "../gerar.js";
 import { construirViewModel } from "../viewModel.js";
 import { validarCv } from "@cv-express/schema";
 import { cvMinimo, cvCompleto, cvExtremo } from "../fixtures.js";
+import { novaExperiencia, novaFormacao, novoIdioma } from "@cv-express/schema";
 
 describe("fixtures", () => {
   /**
@@ -137,6 +138,96 @@ describe("segurança no caminho completo", () => {
     expect(tex).toContain("João Conceição d'Ávila");
     expect(tex).toContain("São Paulo");
     expect(tex).toContain("Ciência da Computação");
+  });
+});
+
+describe("identificadores de campo no .tex", () => {
+  /**
+   * ╔════════════════════════════════════════════════════════════════════════╗
+   * ║  O DEFEITO QUE ATRAVESSOU TODA A VERIFICAÇÃO COM LaTeX REAL            ║
+   * ╚════════════════════════════════════════════════════════════════════════╝
+   *
+   * As fixtures usam ids curtos e legíveis — "exp-1", "form-1" —, e o hífen
+   * não é escapado. O app, porém, cria ids com nanoid, cujo alfabeto inclui
+   * SUBLINHADO. Em produção, `formacao.sdR_DtAzdL5L.curso` saía do motor como
+   * `formacao.sdR\_DtAzdL5L.curso`, o `\cvCampo` gravava isso no `.aux` como
+   * nome de rótulo, e na releitura o XeTeX encontrava `\_` — uma macro —
+   * dentro de um `\csname`, parando com "Missing \endcsname inserted".
+   * Nenhum PDF saía, e o sintoma só aparecia com dado real.
+   *
+   * Por isso estes testes usam ids de nanoid de verdade, e não os das
+   * fixtures.
+   */
+  const ID_NANOID = "sdR_DtAzdL5L";
+
+  function cvComIdsDeNanoid() {
+    return {
+      ...cvCompleto(),
+      experiencias: [
+        novaExperiencia({
+          id: ID_NANOID,
+          cargo: "Desenvolvedor",
+          empresa: "Acme",
+          periodo: { inicio: { ano: 2020, mes: 1 }, fim: "atual" },
+        }),
+      ],
+      formacao: [
+        novaFormacao({
+          id: "Xy-9_qT4ZbWk",
+          curso: "Análise de Sistemas",
+          instituicao: "IFMG",
+          periodo: { inicio: { ano: 2018, mes: 2 }, fim: { ano: 2021, mes: 12 } },
+        }),
+      ],
+      idiomas: [novoIdioma({ id: "a_b-C9", idioma: "Inglês", nivel: "avancado" })],
+    };
+  }
+
+  it("grava o id cru no \\cvCampo, sem contrabarra antes do sublinhado", () => {
+    const { tex } = gerarTex(cvComIdsDeNanoid());
+
+    expect(tex).toContain(`\\cvCampo{ experiencias.${ID_NANOID}.cargo }`);
+    expect(tex).not.toContain("sdR\\_DtAzdL5L");
+  });
+
+  it("vale para todas as seções que marcam campo", () => {
+    const { tex } = gerarTex(cvComIdsDeNanoid());
+
+    for (const esperado of [
+      "pessoal.nome",
+      "objetivo",
+      `experiencias.${ID_NANOID}.empresa`,
+      `experiencias.${ID_NANOID}.periodo`,
+      "formacao.Xy-9_qT4ZbWk.curso",
+      "idiomas.a_b-C9.idioma",
+    ]) {
+      expect(tex).toContain(`\\cvCampo{ ${esperado} }`);
+    }
+  });
+
+  it("nenhum rótulo de \\cvCampo contém contrabarra", () => {
+    /**
+     * A asserção por subtração, como na suíte de ataques: em vez de procurar
+     * o caso que já conhecemos, varre TODOS os rótulos emitidos e exige que
+     * nenhum traga contrabarra — qualquer caractere que o escape de texto
+     * tocasse apareceria aqui, não só o sublinhado.
+     */
+    const { tex } = gerarTex(cvComIdsDeNanoid());
+    const rotulos = [...tex.matchAll(/\\cvCampo\{ ([^}]*) \}/g)].map((m) => m[1]!);
+
+    expect(rotulos.length).toBeGreaterThan(5);
+    for (const r of rotulos) expect(r).not.toContain("\\");
+  });
+
+  it("id forjado não vira injeção: a geração falha alto", () => {
+    // Só chega por chamada direta à API; o app gera com nanoid. Emitir cru
+    // seria injeção, escapar quebraria o .aux — então recusamos.
+    const cv = {
+      ...cvCompleto(),
+      idiomas: [novoIdioma({ id: "x}{\\input{/etc/passwd}", idioma: "Inglês" })],
+    };
+
+    expect(() => gerarTex(cv)).toThrow(/Identificador de campo inválido/);
   });
 });
 

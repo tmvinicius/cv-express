@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { escapeLatex, escapeLatexUrl } from "../escape.js";
+import { escapeLatex, escapeLatexRotulo, escapeLatexUrl } from "../escape.js";
 
 /**
  * SUÍTE DE ATAQUES
@@ -210,5 +210,51 @@ describe("escapeLatexUrl", () => {
     expect(escapeLatexUrl("https://github.com/foo_bar")).toBe(
       "https://github.com/foo\\%5Fbar",
     );
+  });
+});
+
+describe("escapeLatexRotulo", () => {
+  /**
+   * Este escaper não substitui nada: ou o identificador é do alfabeto, ou é
+   * recusado. A razão está no comentário da função — o rótulo volta do `.aux`
+   * dentro de um `\csname`, onde contrabarra é macro e não caractere, então
+   * não existe "escapar com segurança" aqui. Só emitir cru o que é
+   * comprovadamente inofensivo.
+   */
+
+  it("deixa passar o id de nanoid que quebrava a compilação", () => {
+    // O caso real: `formacao.sdR_DtAzdL5L.curso` saía escapado como
+    // `sdR\_DtAzdL5L` e o XeTeX parava com "Missing \endcsname inserted".
+    expect(escapeLatexRotulo("formacao.sdR_DtAzdL5L.curso")).toBe(
+      "formacao.sdR_DtAzdL5L.curso",
+    );
+    // O outro caractere do alfabeto do nanoid.
+    expect(escapeLatexRotulo("experiencias.V1St-XR8Z.cargo")).toBe(
+      "experiencias.V1St-XR8Z.cargo",
+    );
+  });
+
+  it.each([
+    ["contrabarra", "formacao.a\\input{x}.curso"],
+    ["chave de fechamento", "formacao.a}{.curso"],
+    ["porcento, que comentaria o resto da linha do .aux", "formacao.a%b.curso"],
+    ["cifrão", "formacao.a$b.curso"],
+    ["til", "formacao.a~b.curso"],
+    ["espaço", "formacao.a b.curso"],
+    ["vazio", ""],
+  ])("recusa id com %s em vez de tentar escapar", (_nome, id) => {
+    expect(() => escapeLatexRotulo(id)).toThrow(/Identificador de campo inválido/);
+  });
+
+  it("a recusa é o que impede injeção por id forjado", () => {
+    /**
+     * O app gera ids com nanoid, então isto só chega por chamada direta à API.
+     * Emitir cru seria injeção; escapar quebraria a releitura do .aux. Falhar
+     * alto é a terceira saída, e é a certa: o worker devolve erro e nada é
+     * composto.
+     */
+    expect(() =>
+      escapeLatexRotulo("x}{\\input{/etc/passwd}"),
+    ).toThrow();
   });
 });

@@ -1,4 +1,9 @@
-import { escapeLatex, escapeLatexUrl, type TextoLatex } from "../escape.js";
+import {
+  escapeLatex,
+  escapeLatexRotulo,
+  escapeLatexUrl,
+  type TextoLatex,
+} from "../escape.js";
 
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
@@ -39,6 +44,7 @@ import { escapeLatex, escapeLatexUrl, type TextoLatex } from "../escape.js";
 //
 //   {{ caminho.do.campo }}      interpolação — SEMPRE escapada como texto
 //   {{& caminho }}              interpolação de URL — escapada como URL
+//   {{: caminho }}              identificador de campo — validado, emitido cru
 //   {{ . }}                     o próprio item (listas de string)
 //   {{# caminho }} … {{/ }}     bloco: itera se lista, renderiza se verdadeiro
 //   {{> nomeDoPartial }}        inclusão
@@ -53,15 +59,23 @@ import { escapeLatex, escapeLatexUrl, type TextoLatex } from "../escape.js";
 // percent-encoding. Sem uma marcação própria, uma URL interpolada com `{{ }}`
 // viraria `https://github.com/foo\_bar` e o link quebraria — um defeito
 // silencioso, porque o PDF continuaria sendo gerado.
+//
+// Sobre o `{{: }}`: mesma ideia, caso oposto. O identificador vira nome de
+// rótulo do zref e volta do .aux dentro de um `\csname`, onde contrabarra é
+// macro, não caractere. Escapá-lo como texto transformava o sublinhado de um
+// id do nanoid em `\_` e o XeTeX parava com "Missing \endcsname inserted" —
+// este, ao contrário do caso da URL, é um defeito RUIDOSO: nenhum PDF sai.
+// `escapeLatexRotulo` não substitui nada; recusa o que não for do alfabeto.
 
 type No =
   | { tipo: "texto"; valor: string }
   | { tipo: "valor"; caminho: string }
   | { tipo: "url"; caminho: string }
+  | { tipo: "rotulo"; caminho: string }
   | { tipo: "partial"; nome: string }
   | { tipo: "bloco"; caminho: string; filhos: No[] };
 
-const TAG = /\{\{\s*([#/>&]?)\s*([^{}]*?)\s*\}\}/g;
+const TAG = /\{\{\s*([#/>&:]?)\s*([^{}]*?)\s*\}\}/g;
 
 /** Profundidade máxima de partials, para barrar inclusão circular. */
 const PROFUNDIDADE_MAX = 10;
@@ -132,7 +146,7 @@ export function compilar(fonte: string, nomeTemplate: string): No[] {
         throw new ErroDeTemplate("Interpolação vazia: {{ }}", nomeTemplate);
       }
       atual().push({
-        tipo: marcador === "&" ? "url" : "valor",
+        tipo: marcador === "&" ? "url" : marcador === ":" ? "rotulo" : "valor",
         caminho: conteudo,
       });
     }
@@ -217,6 +231,20 @@ function renderNos(
         }
         // O ponto onde todo dado do usuário é neutralizado.
         saida += escapeLatex(String(valor));
+        break;
+      }
+
+      case "rotulo": {
+        const valor = resolver(contexto, no.caminho);
+        if (typeof valor !== "string" || valor === "") {
+          throw new ErroDeTemplate(
+            `Identificador "${no.caminho}" ausente ou não é string.`,
+            nomeTemplate,
+          );
+        }
+        // Cru de propósito, e validado em vez de substituído: ver o comentário
+        // de `escapeLatexRotulo`. Escapar aqui quebra a releitura do .aux.
+        saida += escapeLatexRotulo(valor);
         break;
       }
 

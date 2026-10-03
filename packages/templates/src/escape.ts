@@ -149,6 +149,47 @@ export function escapeLatexUrl(bruto: string): TextoLatex {
 }
 
 /**
+ * Caracteres que um identificador de campo pode conter.
+ *
+ * O alfabeto do nanoid (`A-Za-z0-9_-`) mais o ponto, que o `campo.ts` usa como
+ * separador do caminho. Nada mais entra.
+ */
+const ROTULO_PERMITIDO = /^[A-Za-z0-9._-]+$/;
+
+/**
+ * Prepara um identificador de campo para o argumento de `\cvCampo`.
+ *
+ * ESCAPAR AQUI É O ERRO, e custou uma compilação quebrada em produção. O
+ * `fieldId` não é texto: ele vira nome de rótulo do zref, e o `.aux` o devolve
+ * dentro de um `\csname ... \endcsname`. Um id do nanoid com sublinhado
+ * (`sdR_DtAzdL5L`) escapado como texto virava `sdR\_DtAzdL5L`, e `\_` é uma
+ * MACRO: na releitura do `.aux` o XeTeX parava com
+ * "! Missing \endcsname inserted". O PDF nunca saía.
+ *
+ * Cru, o mesmo id funciona: dentro de um `\csname`, o sublinhado é apenas um
+ * caractere, e `\cvCampo` jamais compõe `#1` — só o usa como rótulo.
+ *
+ * Por isso aqui não há substituição, e sim RECUSA. O identificador é gerado
+ * pelo projeto (nanoid) e só chegaria fora do alfabeto por uma chamada direta
+ * à API com um id forjado — que é exatamente o caso em que emitir cru seria
+ * injeção de LaTeX. Falhar alto é o comportamento certo: o worker devolve
+ * erro e nada é composto.
+ *
+ * O defeito escapou de toda a verificação com LaTeX real porque as fixtures
+ * usam ids curtos e legíveis ("e1", "f1"), sem sublinhado. A suíte agora tem
+ * um id de nanoid de verdade.
+ */
+export function escapeLatexRotulo(bruto: string): TextoLatex {
+  if (!ROTULO_PERMITIDO.test(bruto)) {
+    throw new Error(
+      `Identificador de campo inválido: ${JSON.stringify(bruto)}. ` +
+        `Só são aceitos letras, números, ".", "_" e "-".`,
+    );
+  }
+  return bruto as TextoLatex;
+}
+
+/**
  * Marca uma string como segura SEM escapar.
  *
  * Existe para o conteúdo que o próprio projeto produz — comandos montados

@@ -141,6 +141,39 @@ describe("URLs", () => {
   });
 });
 
+describe("identificadores de campo", () => {
+  /**
+   * O defeito que estes testes impedem, visto em produção: o `fieldId` saía
+   * pelo `{{ }}` comum, o sublinhado de um id do nanoid virava `\_`, e o
+   * XeTeX parava ao reler o `.aux` com "Missing \endcsname inserted". Nenhum
+   * PDF era gerado.
+   */
+  it("{{: }} emite o identificador cru, sem escapar o sublinhado", () => {
+    const saida = renderizar("\\cvCampo{ {{: id }} }{ x }", {
+      id: "formacao.sdR_DtAzdL5L.curso",
+    });
+    expect(saida).toBe("\\cvCampo{ formacao.sdR_DtAzdL5L.curso }{ x }");
+  });
+
+  it("{{ }} no mesmo valor produziria o que quebrava — a marcação importa", () => {
+    // Guarda a diferença entre as duas marcações: se um dia o escape de texto
+    // parar de tocar no sublinhado, este teste avisa que a marcação deixou de
+    // ser necessária (e não o contrário, em silêncio).
+    const comEscape = renderizar("{{ id }}", { id: "formacao.sdR_DtAzdL5L.curso" });
+    expect(comEscape).toBe("formacao.sdR\\_DtAzdL5L.curso");
+  });
+
+  it("recusa identificador fora do alfabeto em vez de escapá-lo", () => {
+    expect(() =>
+      renderizar("{{: id }}", { id: "formacao.a}{\\input{/etc/passwd}.curso" }),
+    ).toThrow(/Identificador de campo inválido/);
+  });
+
+  it("lança quando o identificador está ausente", () => {
+    expect(() => renderizar("{{: id }}", {})).toThrow(/ausente/);
+  });
+});
+
 describe("sintaxe proibida", () => {
   it("rejeita {{{ }}} — não existe saída sem escape", () => {
     expect(() => compilar("{{{ x }}}", "t")).toThrow(/não existe neste motor/);
