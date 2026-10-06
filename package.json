@@ -16,7 +16,8 @@
     "typecheck": "pnpm -r run typecheck",
     "lint": "pnpm -r run lint",
     "verificar": "pnpm run build && pnpm run typecheck && pnpm run lint && pnpm run test",
-    "verificar:completo": "pnpm run verificar && pnpm run build:apps"
+    "verificar:completo": "pnpm run verificar && pnpm run build:apps",
+    "migrar": "pnpm --filter @cv-express/db run build && pnpm --filter @cv-express/db run migrar"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
