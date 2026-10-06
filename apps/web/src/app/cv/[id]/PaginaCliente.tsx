@@ -14,6 +14,7 @@ import {
   acaoSalvar,
   acaoCompilar,
   acaoConcluir,
+  acaoApagarTudo,
   acaoPolirExperiencia,
   acaoNormalizarHabilidades,
 } from "../../../acoes/servidor";
@@ -65,6 +66,17 @@ export function PaginaCliente({
     [sessionId],
   );
   const concluir = useCallback((cv: CvData) => acaoConcluir(sessionId, cv), [sessionId]);
+
+  // Depois de apagar, para uma página que NÃO cria sessão — `/` criaria uma
+  // nova no banco no mesmo instante. `replace` tira do histórico só a entrada
+  // ATUAL; as etapas anteriores continuam lá (nenhum código apaga o histórico
+  // do navegador), e o Voltar cai nelas. Quem as abre vê o `not-found.tsx`
+  // desta rota, que explica o que aconteceu.
+  const apagarDados = useCallback(async () => {
+    const ok = await acaoApagarTudo(sessionId);
+    if (ok) router.replace("/dados-apagados");
+    return ok;
+  }, [router, sessionId]);
   const normalizar = useCallback(
     (cv: CvData) => acaoNormalizarHabilidades(sessionId, cv),
     [sessionId],
@@ -84,6 +96,7 @@ export function PaginaCliente({
       concluir={concluir}
       emailDisponivel={capacidades.email.disponivel}
       prazoInicial={prazo}
+      apagarDados={apagarDados}
     />
   );
 }
