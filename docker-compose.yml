@@ -15,12 +15,10 @@
 #      WORKER_TOKEN=token-local-nao-use-em-producao
 #      EMAIL_PROVIDER=console          # o e-mail do "Concluir e salvar" sai no log
 #
-#  As migrações de packages/db/migrations rodam sozinhas só na PRIMEIRA subida,
-#  com o volume vazio. Num banco que já existia, aplique as novas à mão:
+#  Depois de subir — e a cada atualização do código —, aplique as migrações.
+#  É idempotente: rodar de novo nunca estraga nada.
 #
-#      docker compose exec -T postgres psql -U cvexpress -d cvexpress \
-#        < packages/db/migrations/0001_conclusao_e_link_reutilizavel.sql
-#      (e o mesmo para 0002_limites_de_envio.sql)
+#      DATABASE_URL=postgres://cvexpress:dev@localhost:5432/cvexpress pnpm migrar
 #
 #  A primeira construção do worker demora: o estágio 2 baixa o bundle de
 #  LaTeX do Tectonic (centenas de MB) para o cache que a imagem leva pronta.

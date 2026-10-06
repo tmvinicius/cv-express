@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar            # build + typecheck + lint + testes — 691 testes
+pnpm run verificar            # build + typecheck + lint + testes — 717 testes
 pnpm run verificar:completo   # o mesmo + build do worker e `next build`
 ```
 
@@ -132,6 +132,9 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Regras contra invenção | `packages/ai/src/guardrails.ts` |
 | Provider de IA e variáveis `AI_*` | `packages/ai/src/config.ts` |
 | Tabelas e migração | `packages/db/src/esquema.ts`, `packages/db/migrations/` |
+| Aplicar migrações (`pnpm migrar`) | `packages/db/src/cli/migrar.ts` |
+| Variáveis de ambiente do web, comentadas | `apps/web/.env.example` |
+| Privacidade, "apagar meus dados", currículo inexistente | `apps/web/src/app/privacidade/`, `componentes/ApagarMeusDados.tsx`, `app/dados-apagados/`, `app/cv/[id]/not-found.tsx` |
 | Sessões, link mágico, registro de compilações | `packages/db/src/` |
 | Regra do "Concluir e salvar" (prazo de 5 dias, link reutilizável) | `packages/db/src/linkMagico.ts` |
 | Envio de e-mail (Resend, console) e o texto do e-mail | `apps/web/src/email/` |
@@ -202,6 +205,16 @@ Postgres real (0 de 20 rodadas de 50 pedidos simultâneos passaram do teto).
 `app/retomar/[token]/`, porque é o caminho que `concluir.ts` põe no e-mail.
 Ela já foi parar em `app/cv/retomar/`, o build quebrou e todo link enviado
 daria 404; há teste amarrando os dois agora.
+
+**Migrações:** toda migração nova precisa ser IDEMPOTENTE (`IF NOT EXISTS`,
+`DO $$ … IF EXISTS`) e entrar em `MIGRACOES`. O `pnpm migrar` não guarda
+quais já rodaram — aplica todas, sempre —, e isso só é seguro porque
+`migracoes.test.ts` aplica tudo duas vezes e reprova arquivo esquecido.
+
+**Prazos escritos para a pessoa** (`/privacidade`, a página de currículo
+inexistente) vêm das constantes do código, nunca de número digitado: uma
+política que diz 30 dias enquanto o banco guarda 60 é uma promessa falsa
+por escrito. Ao criar texto novo que cite prazo, importe a constante.
 
 **Sugestão da IA pendente:** o estado da sugestão vive no
 `FormularioCliente`, fora do redutor, e morre junto com o texto que a
@@ -346,16 +359,28 @@ trilha de etapas, o autosave, as sugestões de IA, "gerando" (compila e segue
 sozinha) e o preview com download, aviso de páginas e painel de seções que
 leva direto ao item. O que ainda falta:
 
-- **A narração da tela "gerando".** O planejamento pede mensagens em etapas
-  ("Organizando suas experiências…"); hoje ela mostra um status único.
-- **O botão "apagar meus dados" na tela.** A ação `acaoApagarTudo`, o
-  componente `ApagarMeusDados` e o CSS existem; nenhuma tela renderiza o
-  componente.
-- **Script de migração e `.env.example`.** As migrações se aplicam à mão com
-  `psql` (ou sozinhas na primeira subida do compose); as variáveis de
-  ambiente estão listadas no `README.md`.
+- **Nada do escopo da V1 no planejamento.** O que falta é de operação, não de
+  código — ver a seção 8: o contato de privacidade, revisão jurídica do
+  texto de `/privacidade`, o primeiro envio real pelo Resend, a imagem do
+  worker construída com o Tectonic 0.17.0 e o cron da Vercel rodando de fato.
+- **A sobreposição de regiões clicáveis no PDF** continua fora da V1, como o
+  planejamento previu: a edição acontece pelo painel de seções.
 
 ## 8. A dívida que você precisa saber
+
+**Antes de abrir ao público** — nada disto se resolve com código:
+
+1. `PRIVACIDADE_CONTATO` definido. Sem ele, `/privacidade` diz que o canal
+   não está configurado, e a LGPD exige um.
+2. O texto de `/privacidade` revisado por quem responde juridicamente. Ele
+   descreve o que o código faz, conferido linha a linha, mas não substitui
+   revisão.
+3. `CRON_SECRET` definido na Vercel, e a primeira execução do expurgo
+   conferida no log (`[expurgo] concluído`).
+4. Conta no Resend com o domínio do remetente verificado, e um envio real
+   testado — nenhum saiu até hoje.
+5. A imagem do worker construída com o Tectonic 0.17.0 e um PDF de verdade
+   gerado por ela.
 
 **O que JÁ foi verificado em compilação real, com Tectonic 0.17.0:** o
 `cvexpress.cls` (fontes carregadas pelo nome do arquivo), a macro `\cvCampo`

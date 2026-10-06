@@ -52,7 +52,7 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 | Composição     | LaTeX via Tectonic                    | Engine moderna, ~200 MB, sem instalar TeX Live inteiro            |
 | Worker         | Fastify 5                             |                                                                   |
 | IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
-| Testes         | Vitest 2, Testing Library, PGlite     | 691 testes; o banco de teste é Postgres de verdade, em memória    |
+| Testes         | Vitest 2, Testing Library, PGlite     | 717 testes; o banco de teste é Postgres de verdade, em memória    |
 | Ids            | nanoid                                | Ids estáveis por item de lista                                    |
 
 Sem Handlebars, sem LangChain. Cada dependência ausente foi uma decisão, não um
@@ -106,13 +106,13 @@ Isso roda build, typecheck, lint e testes, nessa ordem. O esperado:
 
 ```
 packages/schema        38 testes
-packages/templates     99 testes
+packages/templates    116 testes
 packages/ai            77 testes
-packages/db            56 testes
+packages/db            59 testes
 apps/latex-worker      51 testes
-apps/web              370 testes
+apps/web              376 testes
 ─────────────────────────────────
-total                 691 testes
+total                 717 testes
 ```
 
 O build vem antes porque os pacotes se importam via `dist/` — um build velho
@@ -125,11 +125,12 @@ checa a fronteira entre servidor e cliente como ela vai para produção.
 ### Subindo o app inteiro
 
 **1. Postgres e worker.** O `docker-compose.yml` sobe os dois, com a sandbox
-do worker já configurada. A migração é aplicada sozinha na primeira subida,
-quando o volume do banco está vazio.
+do worker já configurada. Depois, aplique as migrações — é seguro rodar
+sempre, inclusive a cada atualização do código:
 
 ```bash
 docker compose up -d --build
+DATABASE_URL=postgres://cvexpress:dev@localhost:5432/cvexpress pnpm migrar
 ```
 
 A primeira construção do worker demora: ela baixa o binário do Tectonic e o
@@ -164,8 +165,8 @@ redireciona para `/cv/<id>`, onde começa o formulário. Depois de habilidades,
 com o link — abra-o no navegador para testar a volta ao currículo.
 Para usar a IA de verdade, veja as variáveis abaixo.
 
-**Sem Docker**, qualquer Postgres 16 serve: aplique a migração com
-`psql -f packages/db/migrations/0000_inicial.sql` e ajuste a `DATABASE_URL`.
+**Sem Docker**, qualquer Postgres 16 serve: aponte a `DATABASE_URL` para ele
+e rode `pnpm migrar`.
 O worker roda direto no Node — o passo a passo está em
 [`apps/latex-worker/README.md`](./apps/latex-worker/README.md). Sem worker, o
 formulário funciona inteiro e o preview avisa que o gerador de PDF está
@@ -173,7 +174,10 @@ indisponível, com "tentar de novo" — sem perder nada do que foi preenchido.
 
 ### Variáveis de ambiente do app web
 
-Não há `.env.example`; estas são todas as que o código lê.
+Estas são todas as que o código lê. O
+[`apps/web/.env.example`](./apps/web/.env.example) traz a mesma lista,
+comentada e com valores que batem com o compose: copie para
+`apps/web/.env.local` e o `pnpm dev` já sobe configurado.
 
 | Variável            | Obrigatória | Para quê                                                        |
 | ------------------- | ----------- | --------------------------------------------------------------- |
@@ -191,6 +195,7 @@ Não há `.env.example`; estas são todas as que o código lê.
 | `EMAIL_REMETENTE`   | com `resend` | Ex.: `CV Express <nao-responda@seudominio.com.br>`, de domínio verificado no Resend |
 | `APP_URL`           | em produção | Endereço público do app; base do link do e-mail. Em desenvolvimento, `http://localhost:3000` |
 | `CRON_SECRET`       | em produção | Segredo do expurgo diário. Sem ele, a rota de expurgo recusa (503) e nada é apagado |
+| `PRIVACIDADE_CONTATO` | em produção | Canal de contato do responsável pelos dados, mostrado em `/privacidade`. A LGPD exige um |
 
 Sem e-mail configurado, o botão "Concluir e salvar" aparece desligado, com o
 motivo escrito; o resto do fluxo, inclusive o download, funciona normalmente.
@@ -231,6 +236,7 @@ o fluxo.
 | ------------------------------------------------ | -------------------------------------------------------- |
 | `pnpm run verificar`                             | Build + typecheck + lint + testes. O portão antes de commitar |
 | `pnpm run verificar:completo`                    | O mesmo + build do worker e `next build`                 |
+| `pnpm migrar`                                    | Aplica as migrações no banco de `DATABASE_URL`. Idempotente |
 | `pnpm run build`                                 | Compila os pacotes de `packages/`                        |
 | `pnpm run test`                                  | Só os testes (para no primeiro pacote que falhar)        |
 | `pnpm -r --no-bail run test`                     | Todos os testes, mesmo com falha no meio                 |
@@ -263,21 +269,38 @@ no servidor, como deve.
 | --------------------------------------------------------- | ----------------------------------- |
 | Fundação do monorepo                                      | ✅                                   |
 | `packages/schema` — CvData, limites, FieldId, contrato    | ✅ 38 testes                         |
-| `packages/templates` — escape, motor, template, fixtures  | ✅ 99 testes                         |
+| `packages/templates` — escape, motor, template, fixtures  | ✅ 116 testes                        |
 | `packages/i18n` — rótulos pt-BR                           | ✅                                   |
 | `packages/ai` — serviço, adapters, guardrails             | ✅ 77 testes, só contra o mock       |
-| `packages/db` — sessões, link mágico, compilações         | ✅ 56 testes, contra Postgres real   |
+| `packages/db` — sessões, link mágico, compilações         | ✅ 59 testes, contra Postgres real   |
 | `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 51 testes                         |
 | `apps/web` — 6 etapas, trilha, autosave, sugestões de IA  | ✅ roda localmente                   |
-| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 370 testes no app; fluxo verificado no navegador |
+| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 376 testes no app; fluxo verificado no navegador |
 | Compilação real `.tex → PDF`                              | ✅ verificada com Tectonic 0.17.0    |
 | Imagem Docker do worker com 0.17.0                        | ⚠️ nunca construída                 |
-| Tela "gerando" com narração em etapas                     | ⚠️ status único, sem narração        |
-| Botão "apagar meus dados" (LGPD)                          | ⚠️ ação pronta, sem botão            |
+| Tela "gerando" com narração em etapas                     | ✅                                   |
+| LGPD — apagar meus dados, página de privacidade           | ✅ verificado no navegador; texto sem revisão jurídica |
+| Script de migração e `.env.example`                       | ✅ `pnpm migrar` verificado em Postgres real |
 | "Concluir e salvar" — e-mail com link de 5 dias           | ✅ verificado no navegador, com e-mail no modo `console` |
 | Limite de envio por IP e por destinatário                 | ✅ verificado no navegador e em Postgres real |
 | Expurgo diário agendado                                   | ✅ rota verificada; agendamento da Vercel nunca executado |
 | Envio real pelo Resend                                    | ⚠️ nunca executado                  |
+
+### Antes de abrir ao público
+
+O código da V1 está completo. O que falta é configuração e conferência:
+
+1. `PRIVACIDADE_CONTATO` definido. Sem ele, `/privacidade` diz que o canal
+   não está configurado, e a LGPD exige um.
+2. O texto de `/privacidade` revisado por quem responde juridicamente. Ele
+   descreve o que o código faz, conferido linha a linha, mas não substitui
+   revisão.
+3. `CRON_SECRET` definido na Vercel, e a primeira execução do expurgo
+   conferida no log (`[expurgo] concluído`).
+4. Conta no Resend com o domínio do remetente verificado, e um envio real
+   testado — nenhum saiu até hoje.
+5. A imagem do worker construída com o Tectonic 0.17.0 e um PDF de verdade
+   gerado por ela.
 
 ## Decisões que valem saber de antemão
 
