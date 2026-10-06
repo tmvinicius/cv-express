@@ -1189,6 +1189,86 @@ select.campo__entrada {
   text-decoration: none;
 }
 
+/* ═══ Narração da tela "gerando" ══════════════════════════════════════ */
+
+.narracao {
+  color: var(--cor-primaria);
+  font-weight: var(--peso-medio);
+  min-height: 1.6em; /* a troca de frase não empurra o resto da tela */
+}
+
+/* ═══ Rodapé do formulário (privacidade e apagar) ═══════════════════ */
+
+/*
+ * Discreto de propósito: está em todas as etapas, e não pode competir com o
+ * botão de avançar. Mas precisa ser ACHÁVEL — um direito que ninguém encontra
+ * não é exercido.
+ */
+.formulario__rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--esp-3);
+  padding-top: var(--esp-4);
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+}
+
+/* O .apagar foi desenhado como bloco solto (margem e filete próprios). No
+   rodapé o filete é do rodapé, e a confirmação aberta ocupa a linha toda. */
+.formulario__rodape {
+  border-top: 1px solid var(--cor-borda);
+}
+
+.formulario__rodape .apagar {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.formulario__rodape .apagar--aberto {
+  flex-basis: 100%;
+}
+
+.formulario__rodape > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--alvo-toque);
+}
+
+/* ═══ Páginas de texto (privacidade, dados apagados) ══════════════════ */
+
+.texto-legal {
+  max-width: var(--largura-leitura);
+  margin: 0 auto;
+  padding: var(--esp-7) var(--esp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+.texto-legal h2 {
+  font-size: var(--texto-lg);
+  margin-top: var(--esp-3);
+}
+
+.texto-legal ul {
+  list-style: disc;
+  padding-left: var(--esp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.texto-legal__aviso {
+  background: var(--cor-atencao-fundo);
+  color: var(--cor-atencao);
+  border-left: 3px solid var(--cor-atencao);
+  border-radius: var(--raio-sm);
+  padding: var(--esp-3) var(--esp-4);
+}
+
 /* ═══ Telas largas ════════════════════════════════════════════════════ */
 
 /*
