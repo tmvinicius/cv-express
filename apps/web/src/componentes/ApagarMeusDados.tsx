@@ -79,12 +79,17 @@ export function ApagarMeusDados({
             disabled={fase === "apagando"}
             onClick={() => {
               setFase("apagando");
-              void aoApagar().then((ok) => {
-                // Em sucesso não se volta ao estado "ocioso": quem chamou
-                // redireciona, e mexer no estado de um componente que está
-                // saindo da tela só produziria um piscar.
-                if (!ok) setFase("erro");
-              });
+              // O `catch` não é enfeite: a Server Action LANÇA quando a rede cai
+              // no caminho, e sem ele o botão ficava preso em "Apagando…" para
+              // sempre — a pessoa sem saber se os dados foram apagados ou não.
+              void aoApagar()
+                .catch(() => false)
+                .then((ok) => {
+                  // Em sucesso não se volta ao estado "ocioso": quem chamou
+                  // redireciona, e mexer no estado de um componente que está
+                  // saindo da tela só produziria um piscar.
+                  if (!ok) setFase("erro");
+                });
             }}
           >
             {fase === "apagando" ? "Apagando…" : "Sim, apagar tudo"}

@@ -10,6 +10,7 @@ import { sugerirCortes } from "../../preview/sugestoesDeCorte";
 import { Preview } from "../Preview";
 import { AvisoPaginas } from "../AvisoPaginas";
 import { PainelSecoes } from "../PainelSecoes";
+import { NarracaoGeracao } from "../NarracaoGeracao";
 
 /**
  * As duas telas depois do preenchimento: "gerando" e o preview.
@@ -76,6 +77,7 @@ export function Resultado({
           Estamos compondo o PDF a partir do que você escreveu. Leva poucos
           segundos.
         </p>
+        {estado.fase === "gerando" && <NarracaoGeracao cv={cv} />}
         <Preview estado={estado} nomeArquivo={nomeArquivo} aoTentarDeNovo={tentarDeNovo} />
       </div>
     );

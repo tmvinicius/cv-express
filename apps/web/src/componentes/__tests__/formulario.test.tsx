@@ -58,6 +58,7 @@ function montar(overrides: Partial<Props> = {}) {
       expiraEm: "2026-10-08T17:30:00.000Z",
     }),
   );
+  const apagarDados = vi.fn(async () => true);
   const compilar = vi.fn(
     async (_cv: CvData): Promise<ResultadoCompilacao> => ({ ok: true, resposta: RESPOSTA_PDF }),
   );
@@ -72,6 +73,7 @@ function montar(overrides: Partial<Props> = {}) {
       pedirSugestaoHabilidades={pedirSugestaoHabilidades}
       compilar={compilar}
       concluir={concluir}
+      apagarDados={apagarDados}
       {...overrides}
     />,
   );
@@ -83,6 +85,7 @@ function montar(overrides: Partial<Props> = {}) {
     pedirSugestaoHabilidades,
     compilar,
     concluir,
+    apagarDados,
   };
 }
 
@@ -511,6 +514,7 @@ describe("o fim do fluxo entrega o PDF", () => {
       pedirSugestaoHabilidades: vi.fn(),
       compilar,
       concluir: vi.fn(),
+      apagarDados: vi.fn(),
     };
 
     const { rerender } = render(<FormularioCliente {...props} etapaInicial="preview" />);
@@ -706,5 +710,51 @@ describe("concluir e salvar", () => {
     expect(
       screen.getByRole("button", { name: /^concluir e salvar$/i }).hasAttribute("disabled"),
     ).toBe(false);
+  });
+});
+
+describe("apagar meus dados (LGPD)", () => {
+  it("está no rodapé de TODAS as etapas, com o link de privacidade", () => {
+    // O direito vale a qualquer momento — inclusive para quem desistiu no
+    // meio, e não só para quem chegou ao fim.
+    for (const etapa of ["pessoal", "experiencias", "habilidades"] as const) {
+      montar({ cvInicial: cvProntoParaGerar(), etapaInicial: etapa });
+      expect(screen.getByRole("button", { name: /^apagar meus dados$/i })).toBeDefined();
+      expect(screen.getByRole("link", { name: /privacidade/i }).getAttribute("href")).toBe(
+        "/privacidade",
+      );
+      cleanup();
+    }
+  });
+
+  it("pede confirmação, e só então apaga", async () => {
+    const { apagarDados } = montar({ cvInicial: cvProntoParaGerar() });
+
+    await userEvent.click(screen.getByRole("button", { name: /^apagar meus dados$/i }));
+    expect(apagarDados).not.toHaveBeenCalled();
+    // O foco nasce no Cancelar: quem abriu sem querer sai no Enter.
+    expect(document.activeElement?.textContent).toBe("Cancelar");
+
+    await userEvent.click(screen.getByRole("button", { name: /sim, apagar tudo/i }));
+    expect(apagarDados).toHaveBeenCalledTimes(1);
+  });
+
+  it("se a rede cair no meio, diz que não apagou — em vez de travar em 'Apagando…'", async () => {
+    // Sem o catch, a exceção da Server Action deixava o botão preso, e a
+    // pessoa sem saber se os dados tinham sido apagados.
+    montar({
+      cvInicial: cvProntoParaGerar(),
+      apagarDados: vi.fn(async () => {
+        throw new Error("rede caiu");
+      }),
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: /^apagar meus dados$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /sim, apagar tudo/i }));
+
+    expect(await screen.findByText(/não conseguimos apagar agora/i)).toBeDefined();
+    expect(screen.getByRole("button", { name: /sim, apagar tudo/i }).hasAttribute("disabled")).toBe(
+      false,
+    );
   });
 });

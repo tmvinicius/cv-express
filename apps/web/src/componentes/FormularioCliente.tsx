@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useReducer, useRef, useState } from "react";
 import type { CategoriaHabilidade, CvData } from "@cv-express/schema";
 
@@ -29,6 +30,7 @@ import { Idiomas } from "./etapas/Idiomas";
 import { Habilidades, type EstadoHabilidades } from "./etapas/Habilidades";
 import { Resultado } from "./etapas/Resultado";
 import { ConcluirESalvar } from "./ConcluirESalvar";
+import { ApagarMeusDados } from "./ApagarMeusDados";
 import type { EstadoSugestao } from "./AprovacaoIa";
 import { mensagemDeFalhaIa, podeTentarDeNovo } from "./mensagensIa";
 
@@ -62,6 +64,11 @@ export interface FormularioClienteProps {
   compilar: Compilar;
   /** "Concluir e salvar": grava, fixa o prazo e envia o link por e-mail. */
   concluir: (cv: CvData) => Promise<ResultadoConcluir>;
+  /**
+   * "Apagar meus dados" (LGPD). Apaga e leva embora; devolve false se não deu.
+   * Obrigatória: é um direito, e um formulário sem ele não pode ir ao ar.
+   */
+  apagarDados: () => Promise<boolean>;
   /** O servidor consegue enviar e-mail? */
   emailDisponivel?: boolean;
   /** ISO do prazo, quando o currículo já foi concluído (veio pelo link). */
@@ -88,6 +95,7 @@ export function FormularioCliente({
   concluir,
   emailDisponivel = true,
   prazoInicial = null,
+  apagarDados,
 }: FormularioClienteProps) {
   const [cv, despachar] = useReducer(reduzir, cvInicial);
   const [prazo, setPrazo] = useState<string | null>(prazoInicial);
@@ -339,6 +347,15 @@ export function FormularioCliente({
           </button>
         )}
       </nav>
+
+      {/* Em TODAS as etapas, e não só no fim: o direito de apagar vale a
+          qualquer momento, inclusive para quem desistiu no meio. */}
+      <footer className="formulario__rodape">
+        <Link href="/privacidade" target="_blank" rel="noopener">
+          Privacidade
+        </Link>
+        <ApagarMeusDados aoApagar={apagarDados} />
+      </footer>
     </div>
   );
 }
