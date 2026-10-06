@@ -74,13 +74,19 @@ export async function consumirLimite(
 }
 
 /**
+ * Por quanto tempo um contador fica no banco. Exportado porque a página de
+ * privacidade declara este prazo — e o lê daqui, em vez de repetir o número.
+ */
+export const RETENCAO_LIMITES_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
  * Apaga contadores de janelas que já terminaram há mais de um dia.
  *
  * Um dia de folga, e não zero: a maior janela em uso é de 24h, e apagar uma
  * janela ainda aberta zeraria o limite de quem está no meio dela.
  */
 export async function expurgarLimites(db: Banco, agora: Date = new Date()): Promise<number> {
-  const corte = new Date(agora.getTime() - 2 * 24 * 60 * 60 * 1000);
+  const corte = new Date(agora.getTime() - RETENCAO_LIMITES_MS);
   const apagadas = await db
     .delete(limitesEnvio)
     .where(lt(limitesEnvio.janelaInicio, corte))
