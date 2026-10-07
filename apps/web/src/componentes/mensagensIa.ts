@@ -49,6 +49,15 @@ const MENSAGENS: Record<MotivoFalhaIa, string> = {
   COTA_DA_SESSAO:
     "Você já usou bastante a ajuda da IA nesta sessão. Daqui a alguns minutos dá para pedir de novo.",
   sem_configuracao: IA_DESLIGADA,
+  sessao_ausente:
+    "Não encontramos este currículo — o prazo dele pode ter acabado. Recarregue a página para conferir.",
+  muitos_pedidos:
+    "Muitos pedidos de ajuda da IA vindos da sua rede agora. Tente de novo daqui a pouco — seu texto continua valendo.",
+  // O "desligamento gracioso" do planejamento (§4.6): o teto do dia não é
+  // erro, é a ajuda pausada. O texto diz isso e devolve a pessoa ao caminho
+  // que sempre funciona.
+  teto_diario:
+    "A ajuda da IA está pausada até amanhã. Escreva do seu jeito — o currículo sai igual.",
   desconhecido: "Não conseguimos organizar agora. Seu texto continua valendo.",
 };
 
@@ -63,5 +72,13 @@ export function mensagemDeFalhaIa(motivo: MotivoFalhaIa): string {
  * este trabalho veio corrigir, uma tela depois.
  */
 export function podeTentarDeNovo(motivo: MotivoFalhaIa): boolean {
-  return motivo !== "sem_configuracao" && motivo !== "NAO_AUTORIZADO";
+  return !SEM_NOVA_TENTATIVA.has(motivo);
 }
+
+/** Motivos que não passam com um novo clique — nem no próximo minuto. */
+const SEM_NOVA_TENTATIVA: ReadonlySet<MotivoFalhaIa> = new Set<MotivoFalhaIa>([
+  "sem_configuracao",
+  "NAO_AUTORIZADO",
+  "sessao_ausente",
+  "teto_diario",
+]);

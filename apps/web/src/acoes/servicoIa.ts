@@ -24,18 +24,12 @@ import {
  * escala com o uso. Sem teto, uma aba aberta num laço de reprocessamento gasta
  * dinheiro real sem ninguém perceber até a fatura."
  *
- * LIMITE CONHECIDO, dito alto porque a diferença importa: isto é um teto POR
- * PROCESSO. Em serverless cada instância tem a sua memória e um reinício zera
- * o contador. Corta o laço de uma aba aberta — que é o caso real e o que
- * custava dinheiro — mas não é um limite sob escala. O teto de verdade precisa
- * sair da memória: uma tabela `ai_usage(session_id, criado_em)` contada na
- * janela. `OpcoesServico` já aceita `chamadasPorSessao`/`janelaMs`, então essa
- * troca não mexe no serviço.
- *
- * E o furo que sobra, para não ser descoberto de novo do zero: o `sessionId`
- * vem do cliente e não é verificado, então quem rotaciona ids contorna
- * qualquer cota, persistida ou não. Fechar isso é confirmar que a sessão
- * existe no banco antes de chamar o provider.
+ * O TETO DE VERDADE NÃO É ESTE. A `Cota` do serviço é por processo: em
+ * serverless cada instância tem a sua memória, e um reinício a zera. A cota
+ * que vale — sessão conferida no banco, contadores no Postgres e teto diário
+ * global — está em `cotas.ts` e roda ANTES de o serviço ser chamado. A daqui
+ * fica como segunda linha, e nunca é a mais apertada: ela só vê as chamadas
+ * que a primeira já deixou passar.
  */
 
 let memorizado: CvAiService | null | undefined;

@@ -7,6 +7,8 @@ import {
   type Banco,
 } from "@cv-express/db";
 
+import { autorizarNovaSessao } from "./cotas";
+
 /**
  * Operações de sessão do formulário.
  *
@@ -131,6 +133,27 @@ function ehApenasIncompleto(cv: CvData, caminho: readonly string[]): boolean {
 
 export async function iniciarSessao(db: Banco, agora?: Date) {
   return criarSessao(db, agora);
+}
+
+/**
+ * O botão "Começar" da página inicial.
+ *
+ * Antes, abrir `/` já criava a sessão. Todo GET virava uma linha no banco —
+ * robô de busca, pré-visualização de link no WhatsApp, monitor de uptime —, e
+ * sessão grátis era também a forma de contornar qualquer cota por sessão.
+ * Agora a sessão nasce de um POST, que nenhum desses faz, e com limite por
+ * origem.
+ */
+export async function comecar(
+  db: Banco,
+  origem: string,
+  agora: Date = new Date(),
+): Promise<{ ok: true; id: string } | { ok: false; motivo: "muitos_pedidos" }> {
+  if (!(await autorizarNovaSessao(db, origem, agora))) {
+    return { ok: false, motivo: "muitos_pedidos" };
+  }
+  const sessao = await criarSessao(db, agora);
+  return { ok: true, id: sessao.id };
 }
 
 export async function carregarSessao(db: Banco, id: string, agora?: Date) {

@@ -32,6 +32,12 @@ export type MotivoFalhaIa =
   | CodigoAiError
   /** Não há IA configurada neste ambiente. */
   | "sem_configuracao"
+  /** A sessão não existe ou venceu — o id veio do navegador (ver `cotas.ts`). */
+  | "sessao_ausente"
+  /** A cota por origem (IP) estourou. Passa sozinho dentro da hora. */
+  | "muitos_pedidos"
+  /** O teto diário de gasto, somando todo mundo. Volta no dia seguinte. */
+  | "teto_diario"
   /** Qualquer outra falha — rede, bug nosso, o inesperado. */
   | "desconhecido";
 

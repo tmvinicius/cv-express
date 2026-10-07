@@ -19,7 +19,21 @@ import {
 
 export type ResultadoCompilacao =
   | { ok: true; resposta: CompilarResposta }
-  | { ok: false; codigo: CodigoErroCompilacao; mensagem: string; requestId?: string };
+  | {
+      ok: false;
+      codigo: CodigoErroCompilacao | CodigoRecusaWeb;
+      mensagem: string;
+      requestId?: string;
+    };
+
+/**
+ * Recusas que acontecem ANTES do worker, no próprio app (ver `cotas.ts`).
+ *
+ * Ficam fora de `codigoErroCompilacaoSchema` de propósito: aquele é o
+ * contrato HTTP do worker, e um código que o worker nunca emite não tem lugar
+ * nele.
+ */
+export type CodigoRecusaWeb = "SESSAO_AUSENTE" | "MUITOS_PEDIDOS";
 
 export interface OpcoesCompilar {
   urlWorker: string;
