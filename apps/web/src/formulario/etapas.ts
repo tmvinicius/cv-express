@@ -26,11 +26,15 @@ import {
 /**
  * DIVERGE DO PLANEJAMENTO, que previa 9 etapas começando por "boas-vindas".
  *
- * A etapa não existe aqui, e a razão está escrita em `app/page.tsx`: "sem tela
- * de login, sem 'criar conta', sem escolha nenhuma antes de começar. Cada
- * decisão a menos antes do primeiro campo é uma desistência a menos." Uma tela
- * que só diz o que vai acontecer e pede um clique é exatamente uma decisão a
- * mais antes do primeiro campo.
+ * A etapa não existe aqui pela regra "sem tela de login, sem 'criar conta',
+ * sem escolha nenhuma antes de começar. Cada decisão a menos antes do
+ * primeiro campo é uma desistência a menos."
+ *
+ * Desde então ganhou uma exceção, FORA do formulário: a página inicial
+ * (`app/page.tsx`) tem um botão "Começar", porque criar a sessão no GET de
+ * `/` gravava uma linha por robô e por pré-visualização de link. Ela continua
+ * sem escolha nenhuma — um clique — e não é etapa: não tem barra de
+ * progresso, e quem volta ao currículo nunca passa por ela.
  *
  * Ela chegou a existir em `ETAPAS` sem bloco de renderização, e o efeito era
  * concreto: em `pessoal`, `voltar` devolvia "boas-vindas", o botão Voltar
