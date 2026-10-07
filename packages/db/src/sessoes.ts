@@ -87,6 +87,33 @@ export async function buscarSessao(
 }
 
 /**
+ * A sessão existe e está no prazo? Sem ler o currículo e sem renovar nada.
+ *
+ * É a porta das operações que custam: a ajuda da IA (dinheiro) e a
+ * compilação (CPU do worker). As duas recebiam um `sessionId` do navegador e
+ * confiavam nele, então qualquer cota por sessão se contornava inventando um
+ * id novo a cada pedido. Exigir uma sessão que EXISTE faz o atacante pagar o
+ * preço de criar uma — e criar tem o seu próprio limite por origem.
+ *
+ * Não é `buscarSessao` por dois motivos: aquela traz o JSONB inteiro, e
+ * RENOVA o prazo. Quem chama isto quer só um sim ou não; o uso de verdade
+ * (abrir a página, o autosave) é que renova.
+ */
+export async function sessaoAtiva(
+  db: Banco,
+  id: string,
+  agora: Date = new Date(),
+): Promise<boolean> {
+  const [linha] = await db
+    .select({ id: cvSessions.id })
+    .from(cvSessions)
+    .where(and(eq(cvSessions.id, id), gt(cvSessions.expiraEm, agora)))
+    .limit(1);
+
+  return linha !== undefined;
+}
+
+/**
  * Grava o currículo. É o autosave de cada etapa do formulário.
  *
  * Devolve `false` quando a sessão não existe ou expirou, em vez de lançar:

@@ -9,6 +9,7 @@ import {
   salvarCv,
   apagarSessao,
   expurgarExpiradas,
+  sessaoAtiva,
 } from "../sessoes.js";
 import { concluirSessao, PRAZO_APOS_CONCLUSAO_MS } from "../linkMagico.js";
 import { registrarJob } from "../jobs.js";
@@ -162,6 +163,30 @@ describe("retenção por acesso, não por criação", () => {
     // cenário esperado.
     const sessao = await criarSessao(ctx.db);
     expect(await salvarCv(ctx.db, "id-que-nao-existe", sessao.data)).toBe(false);
+  });
+});
+
+describe("sessaoAtiva — a porta da IA e da compilação", () => {
+  it("responde sim para sessão no prazo e não para id inventado", async () => {
+    // Sem isto, a cota por sessão se contornava trocando o id a cada pedido.
+    const sessao = await criarSessao(ctx.db);
+    expect(await sessaoAtiva(ctx.db, sessao.id)).toBe(true);
+    expect(await sessaoAtiva(ctx.db, "id-inventado-pelo-cliente")).toBe(false);
+  });
+
+  it("responde não para sessão vencida que o expurgo ainda não apagou", async () => {
+    const sessao = await criarSessao(ctx.db);
+    expect(await sessaoAtiva(ctx.db, sessao.id, daquiA(VALIDADE_SESSAO_MS + 1000))).toBe(false);
+  });
+
+  it("não renova o prazo — perguntar não é usar", async () => {
+    // Se renovasse, um laço de pedidos à IA manteria viva para sempre uma
+    // sessão que ninguém abre.
+    const sessao = await criarSessao(ctx.db);
+    await sessaoAtiva(ctx.db, sessao.id, daquiA(25 * 24 * 60 * 60 * 1000));
+
+    const [linha] = await ctx.db.select().from(cvSessions).where(eq(cvSessions.id, sessao.id));
+    expect(linha!.expiraEm.getTime()).toBe(sessao.expiraEm.getTime());
   });
 });
 

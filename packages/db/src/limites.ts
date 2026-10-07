@@ -6,11 +6,12 @@ import type { Banco } from "./conexao.js";
 /**
  * Limite de envio por janela fixa de tempo.
  *
- * Existe porque o "Concluir e salvar" dispara e-mail para o endereço que a
- * pessoa digitou. O teto de 5 links por sessão não basta: quem cria sessões
- * novas dispara e-mails para endereços quaisquer, e o nosso domínio vira
- * remetente de spam — o primeiro sintoma é o e-mail legítimo caindo na caixa
- * de spam de todo mundo.
+ * Nasceu para o "Concluir e salvar", que dispara e-mail para o endereço que a
+ * pessoa digitou: o teto de 5 links por sessão não basta, porque quem cria
+ * sessões novas dispara e-mails para endereços quaisquer e o nosso domínio
+ * vira remetente de spam. Hoje conta também a IA, a compilação e as sessões
+ * novas (ver `apps/web/src/acoes/cotas.ts`); a tabela manteve o nome
+ * `limites_envio` porque renomear exigiria migração sem ganho nenhum.
  *
  * JANELA FIXA, e não deslizante. A deslizante é mais precisa, mas exige
  * guardar cada evento; a fixa é uma linha por (chave, janela) e um único
