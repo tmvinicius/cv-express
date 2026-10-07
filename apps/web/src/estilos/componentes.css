@@ -1269,6 +1269,79 @@ select.campo__entrada {
   padding: var(--esp-3) var(--esp-4);
 }
 
+/* ═══ Página inicial ══════════════════════════════════════════════════ */
+
+/*
+ * Uma coluna estreita e um destaque só: o botão. O resto está aqui para a
+ * pessoa confiar o bastante para clicar — não para competir com ele.
+ */
+.inicio {
+  max-width: var(--largura-leitura);
+  margin: 0 auto;
+  padding: var(--esp-7) var(--esp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-5);
+}
+
+.inicio h1 {
+  font-size: var(--texto-2xl);
+  line-height: var(--altura-linha-apertada);
+}
+
+.inicio__chamada {
+  font-size: var(--texto-lg);
+}
+
+.inicio__passos {
+  list-style: decimal;
+  padding-left: var(--esp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-3);
+}
+
+.inicio__comecar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-3);
+}
+
+.inicio__comecar button {
+  min-height: var(--alvo-toque);
+  padding: var(--esp-3) var(--esp-6);
+  border-radius: var(--raio);
+  font-size: var(--texto-lg);
+  font-weight: var(--peso-forte);
+  background: var(--cor-primaria);
+  color: var(--cor-fundo);
+  transition: background-color var(--transicao);
+}
+
+.inicio__comecar button:hover:not(:disabled) {
+  background: var(--cor-primaria-hover);
+}
+
+/* Enviando: `button:disabled` troca o texto para o suave, que sobre a
+   primária reprovaria em contraste. Sobre a superfície, o par é medido. */
+.inicio__comecar button:disabled {
+  background: var(--cor-superficie);
+}
+
+.inicio__recusa {
+  background: var(--cor-erro-fundo);
+  color: var(--cor-erro);
+  border-left: 3px solid var(--cor-erro);
+  border-radius: var(--raio-sm);
+  padding: var(--esp-3) var(--esp-4);
+}
+
+.inicio__nota {
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+}
+
 /* ═══ Telas largas ════════════════════════════════════════════════════ */
 
 /*
