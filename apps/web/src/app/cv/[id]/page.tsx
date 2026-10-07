@@ -17,6 +17,16 @@ import { PaginaCliente } from "./PaginaCliente";
  */
 export const dynamic = "force-dynamic";
 
+/**
+ * O endereço do currículo é a chave dele — não há senha. Fora dos buscadores,
+ * e sem Referer: um link aberto daqui não leva o id junto para outro site.
+ */
+export const metadata = {
+  title: "Seu currículo — CV Express",
+  robots: { index: false, follow: false },
+  referrer: "no-referrer",
+};
+
 export default async function PaginaFormulario({
   params,
   searchParams,
