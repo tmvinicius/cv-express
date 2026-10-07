@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 
-import { abrirBancoDeTeste, daquiA, type BancoDeTeste } from "./ajuda.js";
+import { abrirBancoDeTeste, type BancoDeTeste } from "./ajuda.js";
 import { chaveDeLimite, consumirLimite, expurgarLimites } from "../limites.js";
 import { expurgoDiario } from "../expurgo.js";
 import { criarSessao, buscarSessao } from "../sessoes.js";
@@ -161,7 +161,9 @@ describe("expurgo diário", () => {
   it("não apaga contador de janela de 24h ainda aberta", async () => {
     const hoje = new Date("2026-10-05T12:00:00Z");
     await consumirLimite(ctx.db, "email:x", { janelaMs: DIA, maximo: 3 }, hoje);
-    expect(await expurgarLimites(ctx.db, daquiA(0))).toBe(0);
+    // Só datas fixas. A primeira versão usava o relógio real ao lado de
+    // `hoje` fixo, e passou a falhar sozinha dois dias depois de escrita.
+    expect(await expurgarLimites(ctx.db, hoje)).toBe(0);
     expect(await expurgarLimites(ctx.db, new Date(hoje.getTime() + DIA - 1))).toBe(0);
   });
 
