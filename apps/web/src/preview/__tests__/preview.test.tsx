@@ -230,6 +230,19 @@ describe("Preview", () => {
     expect(aoTentarDeNovo).toHaveBeenCalled();
   });
 
+  it("erro definitivo não promete que está salvo nem oferece repetir", () => {
+    render(
+      <Preview
+        estado={{ fase: "erro", mensagem: "Este currículo não está mais disponível.", definitivo: true }}
+        nomeArquivo="cv.pdf"
+        aoTentarDeNovo={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("alert").textContent).not.toContain("continua salvo");
+    expect(screen.queryByRole("button", { name: /tentar de novo/i })).toBeNull();
+  });
+
   it("base64 corrompido não derruba a página", () => {
     // Preferível mostrar o estado vazio a estourar a árvore do React inteira.
     expect(() =>

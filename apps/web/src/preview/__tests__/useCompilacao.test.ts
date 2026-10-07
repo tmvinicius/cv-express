@@ -100,4 +100,18 @@ describe("useCompilacao", () => {
     const estado = result.current.estado;
     expect(estado.fase === "pronto" && estado.paginas).toBe(2);
   });
+
+  it("sessão ausente é erro definitivo; os demais, não", async () => {
+    // Sem a marca, a tela diria "continua salvo" e ofereceria "tentar de
+    // novo" para um currículo cujo prazo acabou.
+    const recusa = (codigo: "SESSAO_AUSENTE" | "MUITOS_PEDIDOS") =>
+      vi.fn(async (): Promise<ResultadoCompilacao> => ({ ok: false, codigo, mensagem: "x" }));
+
+    const ausente = renderHook(() => useCompilacao(cvCom("Ana"), recusa("SESSAO_AUSENTE"), true));
+    await waitFor(() => expect(ausente.result.current.estado).toMatchObject({ fase: "erro", definitivo: true }));
+
+    const muitos = renderHook(() => useCompilacao(cvCom("Ana"), recusa("MUITOS_PEDIDOS"), true));
+    await waitFor(() => expect(muitos.result.current.estado.fase).toBe("erro"));
+    expect(muitos.result.current.estado).not.toHaveProperty("definitivo");
+  });
 });

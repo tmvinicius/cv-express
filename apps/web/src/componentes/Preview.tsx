@@ -5,7 +5,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 export type EstadoPreview =
   | { fase: "gerando" }
   | { fase: "pronto"; pdfBase64: string; paginas: number }
-  | { fase: "erro"; mensagem: string };
+  | {
+      fase: "erro";
+      mensagem: string;
+      /**
+       * Nem "tentar de novo" nem "continua salvo" se aplicam: a sessão
+       * acabou (o prazo venceu, ou os dados foram apagados em outra aba).
+       * Repetir dá o mesmo resultado, e dizer que está salvo seria falso.
+       */
+      definitivo?: boolean;
+    };
 
 /**
  * Preview do PDF.
@@ -54,10 +63,12 @@ export function Preview({
     return (
       <div className="preview preview--erro" role="alert">
         <p>{estado.mensagem}</p>
-        <p className="preview__consolo">
-          Seu currículo continua salvo — nada do que você escreveu se perdeu.
-        </p>
-        {aoTentarDeNovo && (
+        {!estado.definitivo && (
+          <p className="preview__consolo">
+            Seu currículo continua salvo — nada do que você escreveu se perdeu.
+          </p>
+        )}
+        {aoTentarDeNovo && !estado.definitivo && (
           <button type="button" onClick={aoTentarDeNovo}>
             Tentar de novo
           </button>

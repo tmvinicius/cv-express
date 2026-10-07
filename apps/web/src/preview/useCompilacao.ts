@@ -68,7 +68,12 @@ export function useCompilacao(cv: CvData, compilar: Compilar, ativo: boolean): C
         setResultado({
           estado: r.ok
             ? { fase: "pronto", pdfBase64: r.resposta.pdf, paginas: r.resposta.pageCount }
-            : { fase: "erro", mensagem: r.mensagem },
+            : {
+                fase: "erro",
+                mensagem: r.mensagem,
+                // A única recusa que um novo pedido não resolve.
+                ...(r.codigo === "SESSAO_AUSENTE" ? { definitivo: true } : {}),
+              },
           chave,
         });
       })
