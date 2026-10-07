@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar            # build + typecheck + lint + testes — 717 testes
+pnpm run verificar            # build + typecheck + lint + testes — 747 testes
 pnpm run verificar:completo   # o mesmo + build do worker e `next build`
 ```
 
@@ -140,6 +140,8 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Envio de e-mail (Resend, console) e o texto do e-mail | `apps/web/src/email/` |
 | Limite de envio (contador no Postgres) | `packages/db/src/limites.ts` |
 | Quantos e-mails por IP e por destinatário | `apps/web/src/acoes/concluir.ts` (`LIMITE_POR_*`) |
+| Cotas da IA e da compilação, teto diário da IA, sessões novas por IP | `apps/web/src/acoes/cotas.ts` |
+| Página inicial (onde a sessão nasce) | `apps/web/src/app/page.tsx`, `componentes/Comecar.tsx`, `acoes/sessao.ts` (`comecar`) |
 | Expurgo diário: o que apaga / quem chama | `packages/db/src/expurgo.ts` / `apps/web/src/app/api/tarefas/expurgo/` + `apps/web/vercel.json` |
 | A ação "Concluir e salvar" e o destino do link | `apps/web/src/acoes/concluir.ts`, `apps/web/src/app/retomar/[token]/` |
 | Quais etapas existem, validação e progresso | `apps/web/src/formulario/etapas.ts`, `maquina.ts` |
@@ -201,10 +203,30 @@ o cabeçalho, senão o cliente escolhe o próprio IP. E, como o `FOR UPDATE`,
 a atomicidade do contador não é provada pelo PGlite — foi medida em
 Postgres real (0 de 20 rodadas de 50 pedidos simultâneos passaram do teto).
 
+**O que custa passa pela porta:** toda Server Action que chame a IA ou o
+worker passa antes por `autorizarIa` ou `autorizarCompilacao`
+(`acoes/cotas.ts`). O `sessionId` que chega do navegador é uma ALEGAÇÃO, não
+uma identidade: sem `sessaoAtiva`, qualquer cota por sessão se contorna
+inventando um id por pedido. Três regras que os testes cobram e que parecem
+otimizáveis sem ser:
+
+- a ordem é sessão → cota da sessão → cota do IP → teto global. Um pedido
+  recusado mais cedo não gasta a cota seguinte; invertida, uma aba em laço
+  consome o teto do dia de todo mundo;
+- a falha é FECHADA: banco fora do ar recusa a IA e a compilação, em vez de
+  liberar sem contar;
+- `sessaoAtiva` não renova o prazo. Perguntar não é usar.
+
+E nenhum GET cria sessão. A sessão nasce no POST do botão "Começar", com
+limite por IP; uma página que crie sessão ao abrir volta a gravar uma linha
+por robô e devolve ao atacante sessões de graça para rodar as cotas.
+
 **Rotas e o link do e-mail:** a página do link mora em
 `app/retomar/[token]/`, porque é o caminho que `concluir.ts` põe no e-mail.
 Ela já foi parar em `app/cv/retomar/`, o build quebrou e todo link enviado
-daria 404; há teste amarrando os dois agora.
+daria 404; há teste amarrando os dois agora. A cópia antiga em
+`app/cv/retomar/` ficou no repositório por um tempo depois da mudança — se
+aparecer de novo, apague.
 
 **Migrações:** toda migração nova precisa ser IDEMPOTENTE (`IF NOT EXISTS`,
 `DO $$ … IF EXISTS`) e entrar em `MIGRACOES`. O `pnpm migrar` não guarda
@@ -381,6 +403,8 @@ leva direto ao item. O que ainda falta:
    testado — nenhum saiu até hoje.
 5. A imagem do worker construída com o Tectonic 0.17.0 e um PDF de verdade
    gerado por ela.
+6. `IA_TETO_DIARIO` ajustado ao orçamento da IA. O padrão (1000 pedidos por
+   dia) é um número de partida, não uma medida de custo.
 
 **O que JÁ foi verificado em compilação real, com Tectonic 0.17.0:** o
 `cvexpress.cls` (fontes carregadas pelo nome do arquivo), a macro `\cvCampo`

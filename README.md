@@ -21,6 +21,8 @@ exigência técnica.
 ## Como funciona
 
 ```
+Página inicial → "Começar" ...... a sessão nasce aqui, num POST — nunca ao abrir a página
+   ↓
 Formulário (6 etapas de dados)
    ↓  autosave com debounce, via Server Action
 CvData ......................... JSON canônico, validado por Zod, salvo no Postgres
@@ -52,7 +54,7 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 | Composição     | LaTeX via Tectonic                    | Engine moderna, ~200 MB, sem instalar TeX Live inteiro            |
 | Worker         | Fastify 5                             |                                                                   |
 | IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
-| Testes         | Vitest 2, Testing Library, PGlite     | 717 testes; o banco de teste é Postgres de verdade, em memória    |
+| Testes         | Vitest 2, Testing Library, PGlite     | 747 testes; o banco de teste é Postgres de verdade, em memória    |
 | Ids            | nanoid                                | Ids estáveis por item de lista                                    |
 
 Sem Handlebars, sem LangChain. Cada dependência ausente foi uma decisão, não um
@@ -108,11 +110,11 @@ Isso roda build, typecheck, lint e testes, nessa ordem. O esperado:
 packages/schema        38 testes
 packages/templates    116 testes
 packages/ai            77 testes
-packages/db            59 testes
+packages/db            62 testes
 apps/latex-worker      51 testes
-apps/web              376 testes
+apps/web              403 testes
 ─────────────────────────────────
-total                 717 testes
+total                 747 testes
 ```
 
 O build vem antes porque os pacotes se importam via `dist/` — um build velho
@@ -188,6 +190,7 @@ comentada e com valores que batem com o compose: copie para
 | `AI_BASE_URL`       | com `openai-compativel` | Ex.: `http://localhost:11434/v1` (Ollama)           |
 | `AI_API_KEY`        | não         | Chave explícita; opcional em modelo local                       |
 | `AI_SUPORTE_JSON`   | não         | `nativo` (padrão), `modo_json` ou `nenhum` — só `openai-compativel` |
+| `IA_TETO_DIARIO`    | não         | Pedidos à IA por dia, somando todo mundo. Padrão `1000`; `0` desliga a ajuda sem tirar a chave |
 | `WORKER_URL`        | para gerar o PDF | Endereço do latex-worker                                   |
 | `WORKER_TOKEN`      | para gerar o PDF | Token compartilhado com o worker; o mesmo `WORKER_TOKEN` dele |
 | `EMAIL_PROVIDER`    | para "Concluir e salvar" | `resend` ou `console` (só fora de produção: escreve o e-mail no log) |
@@ -206,6 +209,31 @@ O "Concluir e salvar" tem três limites de envio, contados no próprio
 Postgres: 5 links por currículo, 10 e-mails por hora por IP e 3 por dia para
 o mesmo destinatário. "Já enviado" não conta. Quem esbarra no limite lê que o
 currículo está salvo e que pode tentar daqui a pouco.
+
+### Cotas: o que impede alguém de esgotar o produto
+
+O produto é gratuito, então a IA é a única despesa que cresce com o uso e o
+worker é a única CPU que um estranho consegue ocupar. As duas operações exigem
+uma sessão que **existe no banco** — um id inventado não chega ao provider
+nem ao worker — e contam o uso no Postgres, com o mesmo contador do limite de
+e-mail (vale entre instâncias e sobrevive a reinícios):
+
+| O quê                | Por sessão     | Por IP         | Global                            |
+| -------------------- | -------------- | -------------- | --------------------------------- |
+| Pedido à IA          | 15 por hora    | 100 por hora   | `IA_TETO_DIARIO` por dia (UTC)    |
+| Geração do PDF       | 120 por hora   | 600 por hora   | —                                 |
+| Começar um currículo | —              | 60 por hora    | —                                 |
+
+Ao atingir o teto do dia, a ajuda da IA aparece como **pausada até amanhã**,
+não como erro: o currículo sai igual sem ela. O teto conta pedidos, não
+tokens — cada pedido já é limitado no serviço (resposta de no máximo 2.000
+tokens, uma nova tentativa no máximo) —, então o gasto diário fica abaixo de
+`IA_TETO_DIARIO × 2 × (entrada + 2.000 tokens de saída)`. Ajuste o número ao
+orçamento.
+
+Se o banco não responde, a IA e a geração recusam em vez de seguir sem
+contar. E nenhum GET cria sessão: robôs de busca e pré-visualizações de link
+abrem a página inicial sem gravar nada.
 
 ### Expurgo diário
 
@@ -272,10 +300,10 @@ no servidor, como deve.
 | `packages/templates` — escape, motor, template, fixtures  | ✅ 116 testes                        |
 | `packages/i18n` — rótulos pt-BR                           | ✅                                   |
 | `packages/ai` — serviço, adapters, guardrails             | ✅ 77 testes, só contra o mock       |
-| `packages/db` — sessões, link mágico, compilações         | ✅ 59 testes, contra Postgres real   |
+| `packages/db` — sessões, link mágico, compilações         | ✅ 62 testes, contra Postgres real   |
 | `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 51 testes                         |
 | `apps/web` — 6 etapas, trilha, autosave, sugestões de IA  | ✅ roda localmente                   |
-| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 376 testes no app; fluxo verificado no navegador |
+| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 403 testes no app; fluxo verificado no navegador |
 | Compilação real `.tex → PDF`                              | ✅ verificada com Tectonic 0.17.0    |
 | Imagem Docker do worker com 0.17.0                        | ⚠️ nunca construída                 |
 | Tela "gerando" com narração em etapas                     | ✅                                   |
@@ -283,6 +311,7 @@ no servidor, como deve.
 | Script de migração e `.env.example`                       | ✅ `pnpm migrar` verificado em Postgres real |
 | "Concluir e salvar" — e-mail com link de 5 dias           | ✅ verificado no navegador, com e-mail no modo `console` |
 | Limite de envio por IP e por destinatário                 | ✅ verificado no navegador e em Postgres real |
+| Cotas de IA e de geração, teto diário da IA, página inicial | ✅ verificado no navegador e em Postgres real |
 | Expurgo diário agendado                                   | ✅ rota verificada; agendamento da Vercel nunca executado |
 | Envio real pelo Resend                                    | ⚠️ nunca executado                  |
 
@@ -301,6 +330,8 @@ O código da V1 está completo. O que falta é configuração e conferência:
    testado — nenhum saiu até hoje.
 5. A imagem do worker construída com o Tectonic 0.17.0 e um PDF de verdade
    gerado por ela.
+6. `IA_TETO_DIARIO` ajustado ao orçamento da IA (o padrão é 1000 pedidos por
+   dia) e o aviso `[cotas] teto diário da IA atingido` acompanhado no log.
 
 ## Decisões que valem saber de antemão
 
