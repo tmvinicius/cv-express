@@ -54,8 +54,11 @@ export default function Privacidade() {
         </li>
         <li>
           <strong>Uma marca do seu endereço IP</strong>, transformada de modo
-          que o endereço não fica guardado em claro, só para limitar quantos
-          e-mails podem ser enviados a partir dele.
+          que o endereço não fica guardado em claro, só para limitar o uso a
+          partir dele: quantos currículos são começados, quantos PDFs são
+          gerados, quantos pedidos de ajuda vão para a IA e quantos e-mails
+          são enviados. O produto é gratuito, e isso é o que impede alguém de
+          esgotá-lo para todo mundo.
         </li>
       </ul>
       <p>
