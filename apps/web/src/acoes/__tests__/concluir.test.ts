@@ -15,7 +15,6 @@ import { novoCv, type CvData } from "@cv-express/schema";
 
 import {
   concluirESalvar,
-  origemDoPedido,
   LIMITE_POR_ORIGEM,
   LIMITE_POR_DESTINATARIO,
 } from "../concluir";
@@ -273,23 +272,6 @@ describe("limite de envio", () => {
       const r = await concluirESalvar(db, id, cv, config, IP, agora);
       expect(r.ok).toBe(true);
     }
-  });
-});
-
-describe("origem do pedido", () => {
-  const h = (valores: Record<string, string>) => new Headers(valores);
-
-  it("usa o primeiro endereço do x-forwarded-for", () => {
-    expect(origemDoPedido(h({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }))).toBe("203.0.113.7");
-  });
-
-  it("cai para x-real-ip", () => {
-    expect(origemDoPedido(h({ "x-real-ip": "203.0.113.8" }))).toBe("203.0.113.8");
-  });
-
-  it("sem cabeçalho, todos dividem a mesma origem — o limite aperta, não some", () => {
-    expect(origemDoPedido(h({}))).toBe("desconhecida");
-    expect(origemDoPedido(h({ "x-forwarded-for": " " }))).toBe("desconhecida");
   });
 });
 

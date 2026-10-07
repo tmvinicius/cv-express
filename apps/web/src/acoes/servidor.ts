@@ -2,14 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import type { HabilidadeSugerida } from "@cv-express/ai";
 import type { CvData } from "@cv-express/schema";
 
 import { obterBanco } from "./banco";
-import { salvarEtapa, apagarTudo } from "./sessao";
+import { salvarEtapa, apagarTudo, comecar } from "./sessao";
 import { obterServicoIa } from "./servicoIa";
 import { compilarCv } from "./compilar";
-import { concluirESalvar, origemDoPedido, type ResultadoConcluir } from "./concluir";
+import { concluirESalvar, type ResultadoConcluir } from "./concluir";
+import {
+  autorizarCompilacao,
+  autorizarIa,
+  origemDoPedido,
+  tetoDiarioIa,
+} from "./cotas";
 import { configuracaoEmail } from "../email/envio";
 import * as ia from "./ia";
 import type { ResultadoIa } from "./ia";
@@ -28,6 +35,23 @@ import type { ResultadoIa } from "./ia";
 // O pool é o mesmo das páginas — ver `banco.ts`. Ele NÃO pode ser declarado
 // aqui: todo export assíncrono de um arquivo "use server" vira Server Action,
 // isto é, um endpoint que qualquer navegador consegue chamar.
+
+/**
+ * "Começar", na página inicial. A sessão nasce aqui — num POST —, e não ao
+ * abrir `/` (ver `comecar` em `sessao.ts`).
+ *
+ * Recebe o estado anterior porque é usada com `useActionState`: assim o
+ * formulário funciona até sem JavaScript, e a recusa por limite volta como
+ * texto na mesma página.
+ */
+export async function acaoComecar(_anterior: string | null): Promise<string | null> {
+  const r = await comecar(await obterBanco(), origemDoPedido(await headers()));
+  if (!r.ok) {
+    return "Muitos currículos começados a partir da sua rede agora. Espere alguns minutos e tente de novo.";
+  }
+  // Fora de qualquer try: `redirect` funciona lançando, e um catch o engoliria.
+  redirect(`/cv/${r.id}`);
+}
 
 export async function acaoSalvar(sessionId: string, cv: CvData): Promise<boolean> {
   const r = await salvarEtapa(await obterBanco(), sessionId, cv);
@@ -54,7 +78,15 @@ export async function acaoApagarTudo(sessionId: string): Promise<boolean> {
   return ok;
 }
 
-export async function acaoCompilar(cv: CvData) {
+/**
+ * Compila o currículo da tela.
+ *
+ * Exige a sessão: sem ela, esta Server Action era um compilador de PDF
+ * gratuito e aberto a qualquer um que montasse um CvData, e o jeito mais
+ * barato de encher a fila do worker (planejamento §5.2). As cotas estão em
+ * `cotas.ts`.
+ */
+export async function acaoCompilar(sessionId: string, cv: CvData) {
   const urlWorker = process.env["WORKER_URL"];
   const token = process.env["WORKER_TOKEN"];
 
@@ -68,16 +100,20 @@ export async function acaoCompilar(cv: CvData) {
     };
   }
 
+  const recusa = await autorizarCompilacao(
+    await obterBanco(),
+    sessionId,
+    origemDoPedido(await headers()),
+  );
+  if (recusa) return recusa;
+
   return compilarCv(cv, { urlWorker, token });
 }
 
 /**
- * A resolução e o REUSO do serviço vivem em `servicoIa.ts`, não aqui.
- *
- * Não é organização: a cota por sessão mora dentro do serviço, então quem
- * decide quando o serviço é criado decide se existe teto de gasto. Isso é
- * lógica, e lógica precisa de teste — que este arquivo não pode ter, porque
- * não roda sem o Next (AGENTS.md §3).
+ * A resolução e o REUSO do serviço vivem em `servicoIa.ts`, e as cotas em
+ * `cotas.ts` — não aqui. Os dois são lógica, e lógica precisa de teste, que
+ * este arquivo não pode ter, porque não roda sem o Next (AGENTS.md §3).
  */
 /**
  * Polimento de uma experiência pela IA.
@@ -94,6 +130,9 @@ export async function acaoPolirExperiencia(
   const servico = obterServicoIa();
   if (!servico) return { ok: false, motivo: "sem_configuracao" };
 
+  const recusa = await liberarIa(sessionId);
+  if (recusa) return { ok: false, motivo: recusa };
+
   return ia.polirExperiencia(servico, cv, experienciaId, sessionId);
 }
 
@@ -104,5 +143,23 @@ export async function acaoNormalizarHabilidades(
   const servico = obterServicoIa();
   if (!servico) return { ok: false, motivo: "sem_configuracao" };
 
+  const recusa = await liberarIa(sessionId);
+  if (recusa) return { ok: false, motivo: recusa };
+
   return ia.normalizarHabilidades(servico, cv, sessionId);
+}
+
+/**
+ * A porta da IA: sessão real, cotas e teto do dia (ver `cotas.ts`).
+ *
+ * Sem `export` de propósito — num arquivo "use server", exportar faria disto
+ * um endpoint público.
+ */
+async function liberarIa(sessionId: string) {
+  return autorizarIa(
+    await obterBanco(),
+    sessionId,
+    origemDoPedido(await headers()),
+    tetoDiarioIa(),
+  );
 }

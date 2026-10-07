@@ -64,7 +64,7 @@ export async function concluirESalvar(
   sessionId: string,
   cv: CvData,
   email: ConfiguracaoEmail | null,
-  /** Endereço de origem do pedido (ver `origemDoPedido` em `servidor.ts`). */
+  /** Endereço de origem do pedido (ver `origemDoPedido` em `cotas.ts`). */
   origem: string,
   agora: Date = new Date(),
 ): Promise<ResultadoConcluir> {
@@ -133,21 +133,4 @@ export async function concluirESalvar(
     email: destino,
     expiraEm: r.expiraEm.toISOString(),
   };
-}
-
-/**
- * O IP de quem pediu, para o limite de envio.
- *
- * Na Vercel — onde o app roda em produção — o `x-forwarded-for` é escrito
- * pela própria plataforma, e o primeiro endereço é o do cliente. Atrás de
- * outro proxy, confira que ele SOBRESCREVE o cabeçalho em vez de acrescentar:
- * sem isso, quem faz a requisição escolhe o próprio IP e escapa do limite
- * por origem (os limites por sessão e por destinatário continuam valendo).
- *
- * Sem cabeçalho nenhum, todos caem na mesma origem "desconhecida". É o lado
- * seguro: o limite aperta, em vez de sumir.
- */
-export function origemDoPedido(h: Pick<Headers, "get">): string {
-  const encaminhado = h.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return encaminhado || h.get("x-real-ip")?.trim() || "desconhecida";
 }

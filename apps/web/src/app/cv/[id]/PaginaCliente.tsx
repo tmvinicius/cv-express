@@ -66,9 +66,13 @@ export function PaginaCliente({
     [sessionId],
   );
   const concluir = useCallback((cv: CvData) => acaoConcluir(sessionId, cv), [sessionId]);
+  // Estável entre renders: `useCompilacao` tem `compilar` nas dependências, e
+  // uma função nova a cada render pediria uma compilação nova a cada render.
+  const compilar = useCallback((cv: CvData) => acaoCompilar(sessionId, cv), [sessionId]);
 
-  // Depois de apagar, para uma página que NÃO cria sessão — `/` criaria uma
-  // nova no banco no mesmo instante. `replace` tira do histórico só a entrada
+  // Depois de apagar, para uma página que confirma o que aconteceu — e não
+  // para `/`, que convidaria a começar de novo no mesmo instante em que a
+  // pessoa exerceu o direito de sair. `replace` tira do histórico só a entrada
   // ATUAL; as etapas anteriores continuam lá (nenhum código apaga o histórico
   // do navegador), e o Voltar cai nelas. Quem as abre vê o `not-found.tsx`
   // desta rota, que explica o que aconteceu.
@@ -92,7 +96,7 @@ export function PaginaCliente({
       aoNavegar={navegar}
       pedirSugestaoExperiencia={polir}
       pedirSugestaoHabilidades={normalizar}
-      compilar={acaoCompilar}
+      compilar={compilar}
       concluir={concluir}
       emailDisponivel={capacidades.email.disponivel}
       prazoInicial={prazo}
