@@ -54,7 +54,8 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 | Composição     | LaTeX via Tectonic                    | Engine moderna, ~200 MB, sem instalar TeX Live inteiro            |
 | Worker         | Fastify 5                             |                                                                   |
 | IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
-| Testes         | Vitest 2, Testing Library, PGlite     | 747 testes; o banco de teste é Postgres de verdade, em memória    |
+| Testes         | Vitest 2, Testing Library, PGlite     | 762 testes; o banco de teste é Postgres de verdade, em memória    |
+| Ponta a ponta  | Playwright                            | Navegador real contra app, worker e Postgres; roda no CI          |
 | Ids            | nanoid                                | Ids estáveis por item de lista                                    |
 
 Sem Handlebars, sem LangChain. Cada dependência ausente foi uma decisão, não um
@@ -73,6 +74,8 @@ cv-express/
 │   ├── i18n/               Rótulos (pt-BR)
 │   ├── ai/                 Camada de IA agnóstica de provider, com guardrails
 │   └── db/                 Sessões, link mágico, registro de compilações
+├── e2e/                    Testes de ponta a ponta (Playwright)
+├── .github/workflows/      CI: verificar:completo e E2E a cada push e PR
 └── AGENTS.md               Guia para quem for contribuir com IA
 ```
 
@@ -112,9 +115,9 @@ packages/templates    116 testes
 packages/ai            77 testes
 packages/db            62 testes
 apps/latex-worker      51 testes
-apps/web              403 testes
+apps/web              418 testes
 ─────────────────────────────────
-total                 747 testes
+total                 762 testes
 ```
 
 O build vem antes porque os pacotes se importam via `dist/` — um build velho
@@ -123,6 +126,36 @@ produz falhas confusas.
 Antes de entregar mudança em `apps/web`, rode também
 `pnpm run verificar:completo`: ele inclui o `next build`, único passo que
 checa a fronteira entre servidor e cliente como ela vai para produção.
+
+### Testes de ponta a ponta
+
+Um navegador percorre o produto como uma pessoa: começar, preencher, pedir
+ajuda à IA, gerar, baixar o PDF, concluir e voltar pelo link do e-mail em
+outro navegador. Também conferem que abrir a página inicial não grava nada,
+que o "Começar" funciona sem JavaScript, os cabeçalhos de segurança e o 404
+em português.
+
+```bash
+docker compose up -d postgres            # ou qualquer Postgres
+pnpm run build && pnpm run build:apps    # o E2E usa o build de produção
+pnpm --filter @cv-express/e2e exec playwright install chromium   # uma vez
+DATABASE_URL=postgres://cvexpress:dev@localhost:5432/cvexpress pnpm run e2e
+```
+
+O próprio E2E aplica as migrações e sobe o worker e o app (portas 8100 e
+3100, para não brigar com o `pnpm dev`). A IA roda no modo `mock`, o e-mail no
+`console` — o link é lido do log em `e2e/resultados/web.log` — e o Tectonic é
+um falso que devolve um PDF real guardado: o E2E prova o fluxo, não a
+composição tipográfica. Nada é apagado do banco; as sessões criadas expiram
+como qualquer outra. Com um Chromium já instalado, aponte
+`E2E_CHROMIUM=/caminho/do/chrome` em vez de baixar o do Playwright.
+
+### Integração contínua
+
+`.github/workflows/ci.yml` roda, a cada push no `main` e a cada PR, dois jobs
+em paralelo: o `verificar:completo` e o E2E, com um Postgres 16 de serviço.
+Não usa segredo nenhum. Se o E2E falha, o relatório, o trace e o log do app
+ficam como artefato `e2e-resultados` por 7 dias.
 
 ### Subindo o app inteiro
 
@@ -265,6 +298,7 @@ o fluxo.
 | `pnpm run verificar`                             | Build + typecheck + lint + testes. O portão antes de commitar |
 | `pnpm run verificar:completo`                    | O mesmo + build do worker e `next build`                 |
 | `pnpm migrar`                                    | Aplica as migrações no banco de `DATABASE_URL`. Idempotente |
+| `pnpm run e2e`                                   | Testes de ponta a ponta (precisa de build e de `DATABASE_URL`) |
 | `pnpm run build`                                 | Compila os pacotes de `packages/`                        |
 | `pnpm run test`                                  | Só os testes (para no primeiro pacote que falhar)        |
 | `pnpm -r --no-bail run test`                     | Todos os testes, mesmo com falha no meio                 |
@@ -303,7 +337,7 @@ no servidor, como deve.
 | `packages/db` — sessões, link mágico, compilações         | ✅ 62 testes, contra Postgres real   |
 | `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 51 testes                         |
 | `apps/web` — 6 etapas, trilha, autosave, sugestões de IA  | ✅ roda localmente                   |
-| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 403 testes no app; fluxo verificado no navegador |
+| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 418 testes no app; fluxo verificado no navegador |
 | Compilação real `.tex → PDF`                              | ✅ verificada com Tectonic 0.17.0    |
 | Imagem Docker do worker com 0.17.0                        | ⚠️ nunca construída                 |
 | Tela "gerando" com narração em etapas                     | ✅                                   |
@@ -314,6 +348,10 @@ no servidor, como deve.
 | Cotas de IA e de geração, teto diário da IA, página inicial | ✅ verificado no navegador e em Postgres real |
 | Expurgo diário agendado                                   | ✅ rota verificada; agendamento da Vercel nunca executado |
 | Envio real pelo Resend                                    | ⚠️ nunca executado                  |
+| Cabeçalhos de segurança e CSP com nonce                   | ✅ verificados no navegador, sem violação no fluxo |
+| Página de erro e 404 em português                         | ✅ verificados com o banco fora do ar |
+| Testes de ponta a ponta (Playwright)                      | ✅ 6 testes, verdes localmente      |
+| CI no GitHub Actions                                      | ⚠️ escrito e validado com actionlint; ainda não rodou no GitHub |
 
 ### Antes de abrir ao público
 
@@ -332,6 +370,8 @@ O código da V1 está completo. O que falta é configuração e conferência:
    gerado por ela.
 6. `IA_TETO_DIARIO` ajustado ao orçamento da IA (o padrão é 1000 pedidos por
    dia) e o aviso `[cotas] teto diário da IA atingido` acompanhado no log.
+7. O CI verde no GitHub, e o `main` protegido para exigi-lo antes do merge
+   (Settings → Branches). Sem a proteção, o CI avisa mas não impede.
 
 ## Decisões que valem saber de antemão
 

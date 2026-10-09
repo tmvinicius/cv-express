@@ -14,9 +14,15 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar            # build + typecheck + lint + testes — 747 testes
+pnpm run verificar            # build + typecheck + lint + testes — 762 testes
 pnpm run verificar:completo   # o mesmo + build do worker e `next build`
+pnpm run e2e                  # navegador de verdade; precisa de build e DATABASE_URL
 ```
+
+O CI (`.github/workflows/ci.yml`) roda o `verificar:completo` e o E2E a cada
+push e PR. Ele existe porque o `main` ficou quebrado duas vezes sem ninguém
+notar. Um job vermelho não é ruído para contornar: é o defeito que chegaria à
+produção.
 
 O `verificar` NÃO roda o `next build`, e o `next build` é o único passo que
 checa a fronteira entre página de servidor e componente de cliente como ela
@@ -106,6 +112,9 @@ Não "otimize" removendo o texto original quando os bullets existem.
 Ele contém caminhos absolutos do servidor e nomes de arquivos internos. Vai
 para o log estruturado, indexado pelo `requestId`; o cliente recebe só o id.
 
+A mesma regra vale para qualquer erro do servidor: `app/error.tsx` mostra só
+o `digest` (o código que liga a tela à linha do log), nunca `error.message`.
+
 O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 
 ---
@@ -141,6 +150,10 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Limite de envio (contador no Postgres) | `packages/db/src/limites.ts` |
 | Quantos e-mails por IP e por destinatário | `apps/web/src/acoes/concluir.ts` (`LIMITE_POR_*`) |
 | Cotas da IA e da compilação, teto diário da IA, sessões novas por IP | `apps/web/src/acoes/cotas.ts` |
+| Cabeçalhos de segurança (fixos) e a CSP com nonce | `apps/web/src/seguranca/cabecalhos.ts`; aplicados em `next.config.ts` e `src/middleware.ts` |
+| Página de erro e 404 genérico | `apps/web/src/app/error.tsx`, `app/not-found.tsx` |
+| Testes de ponta a ponta e o Tectonic falso | `e2e/` |
+| CI | `.github/workflows/ci.yml` |
 | Página inicial (onde a sessão nasce) | `apps/web/src/app/page.tsx`, `componentes/Comecar.tsx`, `acoes/sessao.ts` (`comecar`) |
 | Expurgo diário: o que apaga / quem chama | `packages/db/src/expurgo.ts` / `apps/web/src/app/api/tarefas/expurgo/` + `apps/web/vercel.json` |
 | A ação "Concluir e salvar" e o destino do link | `apps/web/src/acoes/concluir.ts`, `apps/web/src/app/retomar/[token]/` |
@@ -318,6 +331,38 @@ reexportado pelo `index.ts`, para que código de produção não o importe.
 Ao criar um subpath: declare-o em `exports`, confira que o arquivo sai no
 `dist/` e rode `pnpm run verificar`.
 
+### A CSP só funciona com página renderizada por requisição
+
+O middleware gera um nonce por requisição, e o Next o carimba nos próprios
+`<script>` — mas só quando renderiza naquela requisição. Uma página gerada
+no build sai com scripts sem nonce: o navegador os bloqueia, o HTML aparece
+e nada responde ao clique. Por isso o layout raiz é `force-dynamic`. Não o
+remova para "ganhar desempenho" numa página estática; o teste de cabeçalhos
+do E2E confere o nonce de `/dados-apagados` e do 404 justamente por isso.
+
+Três regras da política que parecem afrouxáveis e não são, ou parecem
+apertáveis e quebram:
+
+- **Nada de `unsafe-inline` em `script-src`.** É o que a CSP inteira impede.
+- **Estilo em atributo, sim; `<style>`, não.** `style-src-attr 'unsafe-inline'`
+  existe pela barra de progresso. Um componente novo que precise de
+  `<style>` embutido vai ser bloqueado — use o CSS de `estilos/`.
+- **`Referrer-Policy` não pode ser `no-referrer`.** Com ela o navegador manda
+  `Origin: null` no POST de formulário e o Next recusa a Server Action:
+  medido, o "Começar" sem JavaScript passou a responder 500.
+
+Ao mudar a política, rode o E2E: ele falha em qualquer violação de CSP
+durante o fluxo, e uma violação não aparece em teste unitário nenhum — o
+navegador só bloqueia e escreve no console.
+
+### O E2E não apaga nada, e por isso cada teste usa IP e e-mail novos
+
+O banco do E2E pode ser o mesmo de ontem, com os contadores de limite de
+ontem. Cada contexto de navegador manda um `x-forwarded-for` de
+documentação sorteado, e o fluxo usa um e-mail com carimbo de hora (o limite
+é de 3 links por dia por destinatário). Um teste novo que use IP ou e-mail
+fixos passa na primeira execução e falha na quarta.
+
 O `apps/web` não é exceção. O `transpilePackages` do `next.config.ts` faz o
 Next compilar os pacotes, mas a resolução continua passando pelo `exports`,
 que aponta para o `dist/`. Sem `pnpm run build`, o `next dev` e o `next build`
@@ -405,6 +450,8 @@ leva direto ao item. O que ainda falta:
    gerado por ela.
 6. `IA_TETO_DIARIO` ajustado ao orçamento da IA. O padrão (1000 pedidos por
    dia) é um número de partida, não uma medida de custo.
+7. O CI rodando verde no GitHub — ele foi escrito e validado com actionlint,
+   mas nunca executou lá — e o `main` protegido para exigi-lo antes do merge.
 
 **O que JÁ foi verificado em compilação real, com Tectonic 0.17.0:** o
 `cvexpress.cls` (fontes carregadas pelo nome do arquivo), a macro `\cvCampo`
@@ -420,12 +467,11 @@ executada**: o ambiente onde a troca foi feita não tinha daemon do Docker nem
 acesso ao host do bundle (`relay.fullyjustified.net`). Quem construir
 primeiro, confirme e apague este parágrafo.
 
-**O fluxo de ponta a ponta foi verificado com Tectonic FALSO.** Postgres real,
-worker real e `next start`, dirigidos por um navegador: sessão, as 6 etapas,
-sugestão da IA (mock), "gerando" → preview, download de um PDF válido, aviso
-de 2 páginas vindo do `.aux` e o painel levando ao item. O que o Tectonic
-falso não prova é a composição — e essa é a parte que a verificação acima
-cobre.
+**O fluxo de ponta a ponta é verificado com Tectonic FALSO** — agora por
+uma suíte fixa em `e2e/`, e não mais à mão: Postgres real, worker real e
+`next start`, dirigidos por um navegador, do "Começar" ao link do e-mail
+aberto em outro navegador. O que o Tectonic falso não prova é a composição —
+e essa é a parte que a verificação acima cobre.
 
 Se algo em `apps/latex-worker/README.md` estiver errado, **corrija o
 comentário junto com o código** — os avisos de "não verificado" devem sumir
