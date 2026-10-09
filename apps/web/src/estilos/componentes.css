@@ -1269,6 +1269,39 @@ select.campo__entrada {
   padding: var(--esp-3) var(--esp-4);
 }
 
+/* ═══ Página de erro ══════════════════════════════════════════════════ */
+
+/* O botão é o caminho principal: tentar de novo resolve a maior parte das
+   quedas (o banco voltou, a conexão voltou). O link fica ao lado, quieto. */
+.pagina-erro__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-4);
+}
+
+.pagina-erro__acoes button {
+  min-height: var(--alvo-toque);
+  padding: var(--esp-2) var(--esp-5);
+  border-radius: var(--raio);
+  font-weight: var(--peso-medio);
+  background: var(--cor-primaria);
+  color: var(--cor-fundo);
+  transition: background-color var(--transicao);
+}
+
+.pagina-erro__acoes button:hover {
+  background: var(--cor-primaria-hover);
+}
+
+/* O código é para quem dá suporte, não para quem lê: pequeno e em fonte
+   mono, para ser copiado sem confusão entre 0 e O. */
+.pagina-erro__codigo {
+  font-family: var(--fonte-mono);
+  font-size: var(--texto-sm);
+  color: var(--cor-texto-suave);
+}
+
 /* ═══ Página inicial ══════════════════════════════════════════════════ */
 
 /*
