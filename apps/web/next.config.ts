@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { CABECALHOS_FIXOS } from "./src/seguranca/cabecalhos";
+
 const config: NextConfig = {
   // Os pacotes do workspace passam pelo pipeline do Next (JSX/TS modernos nos
   // pacotes não quebram o bundle).
@@ -22,6 +24,14 @@ const config: NextConfig = {
     // é de onde vinha o aviso "The Next.js plugin was not detected in your
     // ESLint configuration". O build continua checando tipos.
     ignoreDuringBuilds: true,
+  },
+  // Não anunciar "X-Powered-By: Next.js": é informação de graça para quem
+  // procura uma versão com falha conhecida.
+  poweredByHeader: false,
+  // Os cabeçalhos iguais em toda resposta. A CSP, que muda a cada requisição,
+  // está no middleware — ver `src/seguranca/cabecalhos.ts`.
+  async headers() {
+    return [{ source: "/:path*", headers: [...CABECALHOS_FIXOS] }];
   },
   experimental: {
     // O worker devolve o PDF em base64; o corpo passa de 1MB com facilidade.

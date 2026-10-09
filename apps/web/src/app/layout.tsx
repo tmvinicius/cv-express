@@ -7,6 +7,18 @@ import "../estilos/tokens.css";
 import "../estilos/base.css";
 import "../estilos/componentes.css";
 
+/**
+ * Toda página é renderizada por requisição.
+ *
+ * Não é por dado: é pela CSP. O middleware gera um nonce por requisição e o
+ * Next o carimba nos `<script>` da página — mas só quando renderiza naquela
+ * requisição. Uma página gerada no build sairia com scripts sem nonce, que o
+ * navegador bloqueia: o HTML aparece, mas nada responde ao clique. As únicas
+ * páginas estáticas eram `/dados-apagados` e o 404, que não tocam no banco;
+ * renderizá-las sob demanda custa quase nada.
+ */
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "CV Express — seu currículo pronto em minutos",
   description:
