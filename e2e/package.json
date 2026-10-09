@@ -1,0 +1,17 @@
+{
+  "name": "@cv-express/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Testes de ponta a ponta: navegador, app web, worker e Postgres de verdade",
+  "scripts": {
+    "e2e": "playwright test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^22.20.4",
+    "@types/pg": "^8.11.0",
+    "pg": "^8.13.0"
+  }
+}

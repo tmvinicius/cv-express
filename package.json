@@ -17,6 +17,7 @@
     "lint": "pnpm -r run lint",
     "verificar": "pnpm run build && pnpm run typecheck && pnpm run lint && pnpm run test",
     "verificar:completo": "pnpm run verificar && pnpm run build:apps",
+    "e2e": "pnpm --filter @cv-express/e2e run e2e",
     "migrar": "pnpm --filter @cv-express/db run build && pnpm --filter @cv-express/db run migrar"
   },
   "devDependencies": {
