@@ -21,6 +21,7 @@ export const MIGRACOES = [
   "0000_inicial.sql",
   "0001_conclusao_e_link_reutilizavel.sql",
   "0002_limites_de_envio.sql",
+  "0003_remover_compile_jobs.sql",
 ] as const;
 
 /** Lê as migrações em ordem, para quem vai aplicá-las. */

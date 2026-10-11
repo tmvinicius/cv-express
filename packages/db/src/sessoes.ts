@@ -156,8 +156,9 @@ export async function salvarCv(
  * Apaga a sessão e tudo que depende dela.
  *
  * É o botão "apagar meus dados agora" exigido pela LGPD (seção 5.3 do
- * planejamento). O CASCADE das chaves estrangeiras leva junto links mágicos
- * e jobs de compilação — nada de resto órfão.
+ * planejamento). O CASCADE da chave estrangeira leva junto os links mágicos
+ * — nada de resto órfão. Os contadores de limite não guardam o id da sessão
+ * em claro (só um hash) e somem no expurgo de 2 dias.
  */
 export async function apagarSessao(db: Banco, id: string): Promise<boolean> {
   const apagadas = await db

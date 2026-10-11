@@ -109,46 +109,6 @@ export const magicLinks = pgTable(
   ],
 );
 
-export const compileJobs = pgTable(
-  "compile_jobs",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id")
-      .notNull()
-      .references(() => cvSessions.id, { onDelete: "cascade" }),
-
-    status: text("status", {
-      enum: ["pendente", "concluido", "falhou"],
-    }).notNull(),
-
-    /**
-     * Chave do cache de compilação.
-     *
-     * Indexado junto com a sessão: a consulta real é sempre "esta sessão já
-     * compilou este conteúdo?", nunca só por hash.
-     */
-    contentHash: text("content_hash").notNull(),
-
-    templateId: text("template_id").notNull(),
-    templateVersao: text("template_versao").notNull(),
-
-    pdfUrl: text("pdf_url"),
-    pageCount: integer("page_count"),
-
-    /**
-     * Mensagem de erro JÁ TRADUZIDA, nunca o log do LaTeX.
-     *
-     * O log carrega caminhos absolutos do servidor. Ele fica no log
-     * estruturado do worker, indexado pelo requestId — e não no banco, de
-     * onde vazaria em qualquer dump.
-     */
-    erro: text("erro"),
-
-    criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("idx_compile_jobs_sessao_hash").on(t.sessionId, t.contentHash)],
-);
-
 /**
  * Contadores do limite de envio (ver `limites.ts`). A chave já chega com hash:
  * nem IP nem e-mail ficam em claro aqui.
@@ -166,4 +126,4 @@ export const limitesEnvio = pgTable(
   ],
 );
 
-export const esquema = { cvSessions, magicLinks, compileJobs, limitesEnvio };
+export const esquema = { cvSessions, magicLinks, limitesEnvio };

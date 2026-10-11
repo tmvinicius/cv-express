@@ -1,0 +1,29 @@
+-- Remove a tabela compile_jobs, que nunca foi usada.
+--
+-- DIVERGE DO PLANEJAMENTO (seções 2 e 3.6), que a previa para três coisas.
+-- Nenhuma delas se sustenta no produto que existe:
+--
+--   - cache de PDF: a linha guardaria `pdf_url`, mas nenhum PDF é guardado —
+--     o worker devolve o arquivo na resposta e o navegador o mantém. O cache
+--     que funciona é o do worker, por contentHash;
+--   - reproduzir um PDF antigo: exigiria o CvData daquela versão, e a sessão
+--     guarda só o mais recente. A versão do template sozinha não reproduz
+--     nada, e a linha morreria com a sessão em, no máximo, 30 dias;
+--   - investigar falha: o worker já registra cada compilação no log
+--     estruturado, indexada pelo requestId — sem o log do LaTeX no banco.
+--
+-- Usá-la seria uma escrita por compilação (até 120 por hora por sessão) para
+-- guardar o que ninguém lê. Nenhum código jamais gravou nela, então o DROP
+-- não perde dado.
+--
+-- A 0000 continua criando a tabela: migração aplicada é fato histórico, e
+-- reescrevê-la faria bancos que já existem e bancos novos chegarem ao mesmo
+-- esquema por caminhos diferentes. Num banco novo, o `pnpm migrar` cria e
+-- apaga em seguida — custa milissegundos e mantém uma única história.
+--
+-- Se um dia houver armazenamento de PDF, a tabela volta numa migração nova,
+-- desenhada para o que existir então.
+--
+-- Idempotente, como as anteriores. O índice vai junto com a tabela.
+
+DROP TABLE IF EXISTS compile_jobs;

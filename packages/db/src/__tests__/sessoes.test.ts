@@ -12,8 +12,7 @@ import {
   sessaoAtiva,
 } from "../sessoes.js";
 import { concluirSessao, PRAZO_APOS_CONCLUSAO_MS } from "../linkMagico.js";
-import { registrarJob } from "../jobs.js";
-import { cvSessions, magicLinks, compileJobs } from "../esquema.js";
+import { cvSessions, magicLinks } from "../esquema.js";
 import { VALIDADE_SESSAO_MS } from "../linkMagico.js";
 
 let ctx: BancoDeTeste;
@@ -234,18 +233,11 @@ describe("apagar meus dados agora", () => {
   it("leva sessão, links e jobs juntos", async () => {
     const sessao = await criarSessao(ctx.db);
     await concluirSessao(ctx.db, sessao.id, "ana@exemplo.com");
-    await registrarJob(ctx.db, {
-      sessionId: sessao.id,
-      contentHash: "abc",
-      templateId: "classico",
-      templateVersao: "1.0.0",
-    });
 
     expect(await apagarSessao(ctx.db, sessao.id)).toBe(true);
 
     expect(await ctx.db.select().from(cvSessions)).toHaveLength(0);
     expect(await ctx.db.select().from(magicLinks)).toHaveLength(0);
-    expect(await ctx.db.select().from(compileJobs)).toHaveLength(0);
   });
 
   it("devolve false quando não havia nada para apagar", async () => {

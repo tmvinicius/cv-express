@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Persistência: sessões anônimas, link mágico e registro de compilações",
+  "description": "Persistência: sessões anônimas, link mágico e limites de uso",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
