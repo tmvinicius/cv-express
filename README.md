@@ -54,7 +54,7 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 | Composição     | LaTeX via Tectonic                    | Engine moderna, ~200 MB, sem instalar TeX Live inteiro            |
 | Worker         | Fastify 5                             |                                                                   |
 | IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
-| Testes         | Vitest 2, Testing Library, PGlite     | 762 testes; o banco de teste é Postgres de verdade, em memória    |
+| Testes         | Vitest 2, Testing Library, PGlite     | 763 testes; o banco de teste é Postgres de verdade, em memória    |
 | Ponta a ponta  | Playwright                            | Navegador real contra app, worker e Postgres; roda no CI          |
 | Ids            | nanoid                                | Ids estáveis por item de lista                                    |
 
@@ -73,7 +73,7 @@ cv-express/
 │   ├── templates/          Escape de LaTeX, motor, template "clássico", fixtures
 │   ├── i18n/               Rótulos (pt-BR)
 │   ├── ai/                 Camada de IA agnóstica de provider, com guardrails
-│   └── db/                 Sessões, link mágico, registro de compilações
+│   └── db/                 Sessões, link mágico, limites de uso
 ├── e2e/                    Testes de ponta a ponta (Playwright)
 ├── .github/workflows/      CI: verificar:completo e E2E a cada push e PR
 └── AGENTS.md               Guia para quem for contribuir com IA
@@ -113,11 +113,11 @@ Isso roda build, typecheck, lint e testes, nessa ordem. O esperado:
 packages/schema        38 testes
 packages/templates    116 testes
 packages/ai            77 testes
-packages/db            62 testes
+packages/db            57 testes
 apps/latex-worker      51 testes
-apps/web              418 testes
+apps/web              424 testes
 ─────────────────────────────────
-total                 762 testes
+total                 763 testes
 ```
 
 O build vem antes porque os pacotes se importam via `dist/` — um build velho
@@ -132,8 +132,8 @@ checa a fronteira entre servidor e cliente como ela vai para produção.
 Um navegador percorre o produto como uma pessoa: começar, preencher, pedir
 ajuda à IA, gerar, baixar o PDF, concluir e voltar pelo link do e-mail em
 outro navegador. Também conferem que abrir a página inicial não grava nada,
-que o "Começar" funciona sem JavaScript, os cabeçalhos de segurança e o 404
-em português.
+que o "Começar" funciona sem JavaScript, os cabeçalhos de segurança, o 404
+em português e a prévia de compartilhamento (tags e imagem).
 
 ```bash
 docker compose up -d postgres            # ou qualquer Postgres
@@ -229,7 +229,7 @@ comentada e com valores que batem com o compose: copie para
 | `EMAIL_PROVIDER`    | para "Concluir e salvar" | `resend` ou `console` (só fora de produção: escreve o e-mail no log) |
 | `RESEND_API_KEY`    | com `resend` | Chave da API do Resend                                      |
 | `EMAIL_REMETENTE`   | com `resend` | Ex.: `CV Express <nao-responda@seudominio.com.br>`, de domínio verificado no Resend |
-| `APP_URL`           | em produção | Endereço público do app; base do link do e-mail. Em desenvolvimento, `http://localhost:3000` |
+| `APP_URL`           | em produção | Endereço público do app; base do link do e-mail e da imagem da prévia de compartilhamento. Em desenvolvimento, `http://localhost:3000` |
 | `CRON_SECRET`       | em produção | Segredo do expurgo diário. Sem ele, a rota de expurgo recusa (503) e nada é apagado |
 | `PRIVACIDADE_CONTATO` | em produção | Canal de contato do responsável pelos dados, mostrado em `/privacidade`. A LGPD exige um |
 
@@ -299,6 +299,7 @@ o fluxo.
 | `pnpm run verificar:completo`                    | O mesmo + build do worker e `next build`                 |
 | `pnpm migrar`                                    | Aplica as migrações no banco de `DATABASE_URL`. Idempotente |
 | `pnpm run e2e`                                   | Testes de ponta a ponta (precisa de build e de `DATABASE_URL`) |
+| `pnpm --filter @cv-express/ai contrato:real`     | Contrato da IA contra o provider do ambiente — pago; ver `packages/ai/README.md` |
 | `pnpm run build`                                 | Compila os pacotes de `packages/`                        |
 | `pnpm run test`                                  | Só os testes (para no primeiro pacote que falhar)        |
 | `pnpm -r --no-bail run test`                     | Todos os testes, mesmo com falha no meio                 |
@@ -333,11 +334,11 @@ no servidor, como deve.
 | `packages/schema` — CvData, limites, FieldId, contrato    | ✅ 38 testes                         |
 | `packages/templates` — escape, motor, template, fixtures  | ✅ 116 testes                        |
 | `packages/i18n` — rótulos pt-BR                           | ✅                                   |
-| `packages/ai` — serviço, adapters, guardrails             | ✅ 77 testes, só contra o mock       |
-| `packages/db` — sessões, link mágico, compilações         | ✅ 62 testes, contra Postgres real   |
+| `packages/ai` — serviço, adapters, guardrails             | ✅ 77 testes contra o mock; contrato contra provider real pronto ([roteiro](./packages/ai/README.md)), nunca rodado contra um modelo |
+| `packages/db` — sessões, link mágico, limites de uso      | ✅ 57 testes, contra Postgres real   |
 | `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 51 testes                         |
 | `apps/web` — 6 etapas, trilha, autosave, sugestões de IA  | ✅ roda localmente                   |
-| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 418 testes no app; fluxo verificado no navegador |
+| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 424 testes no app; fluxo verificado no navegador |
 | Compilação real `.tex → PDF`                              | ✅ verificada com Tectonic 0.17.0    |
 | Imagem Docker do worker com 0.17.0                        | ⚠️ nunca construída                 |
 | Tela "gerando" com narração em etapas                     | ✅                                   |
@@ -350,7 +351,8 @@ no servidor, como deve.
 | Envio real pelo Resend                                    | ⚠️ nunca executado                  |
 | Cabeçalhos de segurança e CSP com nonce                   | ✅ verificados no navegador, sem violação no fluxo |
 | Página de erro e 404 em português                         | ✅ verificados com o banco fora do ar |
-| Testes de ponta a ponta (Playwright)                      | ✅ 6 testes, verdes localmente      |
+| Testes de ponta a ponta (Playwright)                      | ✅ 7 testes, verdes localmente      |
+| Prévia de compartilhamento (Open Graph) e ícone           | ✅ tags e imagem conferidas; prévia num app de mensagem nunca vista |
 | CI no GitHub Actions                                      | ⚠️ escrito e validado com actionlint; ainda não rodou no GitHub |
 
 ### Antes de abrir ao público
@@ -372,6 +374,12 @@ O código da V1 está completo. O que falta é configuração e conferência:
    dia) e o aviso `[cotas] teto diário da IA atingido` acompanhado no log.
 7. O CI verde no GitHub, e o `main` protegido para exigi-lo antes do merge
    (Settings → Branches). Sem a proteção, o CI avisa mas não impede.
+8. Com o domínio no ar e `APP_URL` apontando para ele, colar o link num
+   chat (WhatsApp, LinkedIn) e conferir a prévia: título, descrição e
+   imagem. Ela só pode ser vista de um endereço público.
+9. Se a IA for usar outro provider que não a Anthropic, rodar antes o
+   contrato contra ele — o roteiro está em
+   [`packages/ai/README.md`](./packages/ai/README.md).
 
 ## Decisões que valem saber de antemão
 

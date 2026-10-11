@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar            # build + typecheck + lint + testes — 762 testes
+pnpm run verificar            # build + typecheck + lint + testes — 763 testes
 pnpm run verificar:completo   # o mesmo + build do worker e `next build`
 pnpm run e2e                  # navegador de verdade; precisa de build e DATABASE_URL
 ```
@@ -140,16 +140,18 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | O que a IA oferece ao resto do projeto | `packages/ai/src/servico.ts` |
 | Regras contra invenção | `packages/ai/src/guardrails.ts` |
 | Provider de IA e variáveis `AI_*` | `packages/ai/src/config.ts` |
+| Trocar de provider (roteiro e contrato contra provider real) | `packages/ai/README.md` |
 | Tabelas e migração | `packages/db/src/esquema.ts`, `packages/db/migrations/` |
 | Aplicar migrações (`pnpm migrar`) | `packages/db/src/cli/migrar.ts` |
 | Variáveis de ambiente do web, comentadas | `apps/web/.env.example` |
 | Privacidade, "apagar meus dados", currículo inexistente | `apps/web/src/app/privacidade/`, `componentes/ApagarMeusDados.tsx`, `app/dados-apagados/`, `app/cv/[id]/not-found.tsx` |
-| Sessões, link mágico, registro de compilações | `packages/db/src/` |
+| Sessões, link mágico, limites de uso | `packages/db/src/` |
 | Regra do "Concluir e salvar" (prazo de 5 dias, link reutilizável) | `packages/db/src/linkMagico.ts` |
 | Envio de e-mail (Resend, console) e o texto do e-mail | `apps/web/src/email/` |
 | Limite de envio (contador no Postgres) | `packages/db/src/limites.ts` |
 | Quantos e-mails por IP e por destinatário | `apps/web/src/acoes/concluir.ts` (`LIMITE_POR_*`) |
 | Cotas da IA e da compilação, teto diário da IA, sessões novas por IP | `apps/web/src/acoes/cotas.ts` |
+| Título, descrição e prévia de compartilhamento (Open Graph), ícone | `apps/web/src/compartilhamento/metadados.ts`, `app/opengraph-image.tsx`, `app/icon.svg` |
 | Cabeçalhos de segurança (fixos) e a CSP com nonce | `apps/web/src/seguranca/cabecalhos.ts`; aplicados em `next.config.ts` e `src/middleware.ts` |
 | Página de erro e 404 genérico | `apps/web/src/app/error.tsx`, `app/not-found.tsx` |
 | Testes de ponta a ponta e o Tectonic falso | `e2e/` |
@@ -395,7 +397,7 @@ e, junto, a lista de commits sugeridos (arquivos → mensagem).
 
 ## 6. Divergir do planejamento é permitido
 
-Quatro decisões deste código contrariam o documento de planejamento, todas de
+Cinco decisões deste código contrariam o documento de planejamento, todas de
 propósito e todas registradas no comentário do arquivo:
 
 1. **`FieldId` por id estável**, não por índice (`campo.ts`) — índice é
@@ -410,6 +412,12 @@ propósito e todas registradas no comentário do arquivo:
    (`linkMagico.ts`) — regra do mantenedor: o mesmo link serve quantas vezes
    a pessoa quiser até o prazo. O custo (um e-mail encaminhado é uma chave até
    o prazo) e o que o limita estão no comentário do arquivo.
+5. **Sem tabela `compile_jobs`** (`migrations/0003_remover_compile_jobs.sql`)
+   — o planejamento a previa para cache de PDF e para reproduzir um PDF
+   antigo. Nenhum PDF é guardado, e a sessão só tem o CvData mais recente, então
+   a tabela não servia a nenhum dos dois; nada jamais gravou nela. Se um dia
+   houver armazenamento de PDF, ela volta numa migração nova, desenhada para
+   o que existir então.
 
 O padrão a seguir: divergir quando houver motivo forte, **registrar a
 divergência no código, no ponto onde ela vive**, e dizer ao mantenedor. O que
@@ -478,11 +486,15 @@ comentário junto com o código** — os avisos de "não verificado" devem sumir
 quando deixarem de ser verdade, e os de "verificado" devem dizer com qual
 versão.
 
-**Nenhum provider de IA real é chamado nos testes.** A suíte de contrato de
-`packages/ai` roda só contra o `MockAdapter`, em três modos de suporte a JSON.
-Os adapters Anthropic e OpenAI-compatível não são exercitados contra uma API
-de verdade. O `contrato.test.ts` diz que o roteiro para isso está no README do
-pacote, mas esse README ainda não existe.
+**Nenhum modelo de IA de verdade foi chamado até hoje.** No `pnpm test` e no
+CI, a suíte de contrato de `packages/ai` roda contra o `MockAdapter`, em três
+modos de suporte a JSON. As mesmas asserções rodam contra um provider real
+com `pnpm --filter @cv-express/ai contrato:real`, com o roteiro em
+`packages/ai/README.md`. Essa execução foi verificada só contra um servidor
+OpenAI-compatível FALSO, local: prova a ligação (ambiente → adapter → HTTP →
+validação → guardrails), e um falso que inventa número reprovou como devia.
+A primeira execução contra a Anthropic ou o Ollama é a prova que falta. Quem
+fizer, registre o modelo e o resultado no README do pacote.
 
 `packages/db` não tem essa dívida: os testes aplicam a migração de produção no
 PGlite, que é o próprio Postgres, e exercitam o SQL real.
