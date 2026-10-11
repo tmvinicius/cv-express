@@ -80,3 +80,28 @@ test("endereço inexistente responde 404 em português", async ({ page }) => {
   expect(r2?.status()).toBe(404);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Esta página não existe");
 });
+
+test("a prévia do link tem título, descrição e imagem que as redes conseguem buscar", async ({
+  request,
+}) => {
+  // O que o WhatsApp e o LinkedIn leem ao montar a prévia. A imagem precisa
+  // de endereço ABSOLUTO: com um relativo, a prévia sai sem imagem.
+  const html = await (await request.get("/")).text();
+  const meta = (propriedade: string) =>
+    html.match(new RegExp(`<meta (?:property|name)="${propriedade}" content="([^"]*)"`))?.[1];
+
+  expect(meta("og:title")).toBe("CV Express — seu currículo pronto em minutos");
+  expect(meta("og:description")).toBeTruthy();
+  expect(meta("og:locale")).toBe("pt_BR");
+  expect(meta("twitter:card")).toBe("summary_large_image");
+
+  const imagem = meta("og:image");
+  expect(imagem).toMatch(/^https?:\/\//);
+  const r = await request.get(imagem!);
+  expect(r.status()).toBe(200);
+  expect(r.headers()["content-type"]).toBe("image/png");
+
+  const icone = html.match(/<link rel="icon" href="([^"]+)"/)?.[1];
+  expect(icone).toBeTruthy();
+  expect((await request.get(icone!)).status()).toBe(200);
+});
