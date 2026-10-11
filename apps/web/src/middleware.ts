@@ -35,9 +35,11 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      // Arquivos estáticos e a rota de expurgo não são HTML: CSP neles não
-      // protege nada e só custa uma execução do middleware.
-      source: "/((?!api/|_next/static|_next/image|favicon.ico|robots.txt).*)",
+      // Arquivos estáticos, as imagens de metadados e a rota de expurgo não
+      // são HTML: CSP neles não protege nada e só custa uma execução do
+      // middleware.
+      source:
+        "/((?!api/|_next/static|_next/image|favicon.ico|robots.txt|icon.svg|opengraph-image|twitter-image).*)",
       // Pré-carregamentos do roteador: a resposta é reaproveitada depois, e
       // um nonce gerado agora não seria o da página que vai usá-la.
       missing: [

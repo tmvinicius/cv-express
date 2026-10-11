@@ -1,4 +1,7 @@
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
+
+import { metadadosDoSite } from "../compartilhamento/metadados";
 
 // A ordem importa: tokens define as variáveis, base as consome, componentes
 // depende das duas. Trocar a ordem produz variável indefinida — e o
@@ -19,11 +22,15 @@ import "../estilos/componentes.css";
  */
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "CV Express — seu currículo pronto em minutos",
-  description:
-    "Preencha um formulário rápido e receba um currículo em PDF, composto com qualidade tipográfica.",
-};
+/**
+ * Título, descrição e prévia de compartilhamento — ver `metadados.ts`.
+ *
+ * Função, e não objeto: `APP_URL` é lida a cada requisição, e não congelada
+ * no momento em que o módulo carregou.
+ */
+export function generateMetadata(): Metadata {
+  return metadadosDoSite();
+}
 
 // Sem isto o celular renderiza numa viewport virtual de 980px e encolhe
 // tudo — o formulário sai ilegível justamente no aparelho onde boa parte do
