@@ -19,7 +19,8 @@
     "@cv-express/i18n": "workspace:*",
     "@cv-express/schema": "workspace:*",
     "@cv-express/templates": "workspace:*",
-    "next": "^15.1.0",
+    "next": "^15.5.27",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -30,7 +31,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
-    "drizzle-orm": "^0.38.0",
+    "drizzle-orm": "^0.45.4",
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "jsdom": "^25.0.0",

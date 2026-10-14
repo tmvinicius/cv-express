@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@cv-express/schema": "workspace:*",
-    "drizzle-orm": "^0.38.0",
+    "drizzle-orm": "^0.45.4",
     "nanoid": "^5.0.9"
   },
   "peerDependencies": {
@@ -35,7 +35,7 @@
     "@electric-sql/pglite": "^0.2.0",
     "@types/node": "^22.20.4",
     "@types/pg": "^8.11.0",
-    "drizzle-kit": "^0.30.0",
+    "drizzle-kit": "^0.31.11",
     "pg": "^8.13.0"
   }
 }

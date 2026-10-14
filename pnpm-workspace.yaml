@@ -2,3 +2,23 @@ packages:
   - "apps/*"
   - "packages/*"
   - "e2e"
+
+# Versões forçadas em dependências INDIRETAS, por vulnerabilidade conhecida
+# (`pnpm audit --prod`). Cada linha diz quem traz o pacote e por que forçar
+# é seguro. Ao atualizar quem o traz, confira se a linha ainda é necessária:
+# rode `pnpm audit --prod` sem ela.
+overrides:
+  # O Next fixa postcss 8.4.31, que tem leitura de arquivo e travessia de
+  # caminho via sourceMappingURL. Roda só no build, sobre o nosso próprio
+  # CSS — o risco aqui é baixo —, mas a 8.5 é compatível dentro da v8.
+  "postcss@<8.5.23": "^8.5.28"
+  # Vem com o postcss: negação de serviço com source map malicioso.
+  "source-map-js@<1.2.2": "^1.2.2"
+  # Opcional do Next, para otimizar imagens (o app desliga o otimizador em
+  # next.config.ts). A faixa do Next já aceita a 0.35.5; isto só impede o
+  # lockfile de ficar numa versão com a falha do librsvg.
+  "sharp@<0.35.5": "^0.35.5"
+  # Vem do `gel` (cliente de outro banco), que o drizzle-orm 0.45 aceita como
+  # par opcional e o drizzle-kit traz. O projeto nunca o carrega — só
+  # Postgres —, mas a versão travada tem injeção de comando em `quote()`.
+  "shell-quote@<1.11.0": "^1.12.0"
