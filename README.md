@@ -50,11 +50,12 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 | Monorepo       | pnpm workspaces 10                    | Dependências estritas: um pacote só enxerga o que declarou        |
 | Validação      | Zod 3                                 | Um schema só, usado no cliente, no servidor e na borda            |
 | Web            | Next.js 15 (App Router) + React 19    | Server Actions mantêm banco, token e chave de IA no servidor      |
-| Banco          | Postgres + Drizzle ORM 0.38           | Migração em SQL escrito à mão, aplicada igual em produção e teste |
+| Banco          | Postgres + Drizzle ORM 0.45           | Migração em SQL escrito à mão, aplicada igual em produção e teste |
 | Composição     | LaTeX via Tectonic                    | Engine moderna, ~200 MB, sem instalar TeX Live inteiro            |
 | Worker         | Fastify 5                             |                                                                   |
 | IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
-| Testes         | Vitest 2, Testing Library, PGlite     | 763 testes; o banco de teste é Postgres de verdade, em memória    |
+| Preview        | PDF.js (build legacy)                 | As páginas desenhadas em canvas: funciona no celular, onde o leitor de PDF do navegador não existe |
+| Testes         | Vitest 2, Testing Library, PGlite     | 775 testes; o banco de teste é Postgres de verdade, em memória    |
 | Ponta a ponta  | Playwright                            | Navegador real contra app, worker e Postgres; roda no CI          |
 | Ids            | nanoid                                | Ids estáveis por item de lista                                    |
 
@@ -114,10 +115,10 @@ packages/schema        38 testes
 packages/templates    116 testes
 packages/ai            77 testes
 packages/db            57 testes
-apps/latex-worker      51 testes
-apps/web              424 testes
+apps/latex-worker      52 testes
+apps/web              435 testes
 ─────────────────────────────────
-total                 763 testes
+total                 775 testes
 ```
 
 O build vem antes porque os pacotes se importam via `dist/` — um build velho
@@ -351,7 +352,9 @@ no servidor, como deve.
 | Envio real pelo Resend                                    | ⚠️ nunca executado                  |
 | Cabeçalhos de segurança e CSP com nonce                   | ✅ verificados no navegador, sem violação no fluxo |
 | Página de erro e 404 em português                         | ✅ verificados com o banco fora do ar |
-| Testes de ponta a ponta (Playwright)                      | ✅ 7 testes, verdes localmente      |
+| Testes de ponta a ponta (Playwright)                      | ✅ 8 testes, verdes localmente      |
+| Preview do PDF no celular (PDF.js)                        | ✅ Chromium com tela de Pixel 7; aparelho de verdade nunca testado |
+| Dependências de produção sem vulnerabilidade conhecida    | ✅ `pnpm audit --prod` limpo em 14/10; Dependabot configurado |
 | Prévia de compartilhamento (Open Graph) e ícone           | ✅ tags e imagem conferidas; prévia num app de mensagem nunca vista |
 | CI no GitHub Actions                                      | ⚠️ escrito e validado com actionlint; ainda não rodou no GitHub |
 
@@ -380,6 +383,12 @@ O código da V1 está completo. O que falta é configuração e conferência:
 9. Se a IA for usar outro provider que não a Anthropic, rodar antes o
    contrato contra ele — o roteiro está em
    [`packages/ai/README.md`](./packages/ai/README.md).
+10. O preview aberto num Android e num iPhone de verdade, de preferência
+    antigos. O E2E roda num Chromium com a tela de um celular, que não
+    reproduz o navegador do aparelho.
+11. "Dependabot security updates" ligado (Settings → Code security). O
+    `.github/dependabot.yml` cuida das atualizações de rotina; os alertas de
+    segurança são ligados ali.
 
 ## Decisões que valem saber de antemão
 

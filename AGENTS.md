@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar            # build + typecheck + lint + testes — 763 testes
+pnpm run verificar            # build + typecheck + lint + testes — 775 testes
 pnpm run verificar:completo   # o mesmo + build do worker e `next build`
 pnpm run e2e                  # navegador de verdade; precisa de build e DATABASE_URL
 ```
@@ -170,6 +170,9 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Montagem do formulário | `apps/web/src/componentes/FormularioCliente.tsx` |
 | Telas "gerando" e preview (compilação, download, painel) | `apps/web/src/componentes/etapas/Resultado.tsx` |
 | Preview, painel de seções, aviso de páginas | `apps/web/src/componentes/`, `apps/web/src/preview/` |
+| O desenho das páginas do PDF (PDF.js) | `apps/web/src/preview/PaginasPdf.tsx` |
+| Versões forçadas de dependências indiretas, e por quê | `pnpm-workspace.yaml` (`overrides`) |
+| Limite do corpo das Server Actions | `apps/web/next.config.ts` (`CORPO_MAXIMO_BYTES`) |
 
 **Regra prática:** se a mudança é de aparência, ela pertence ao `.cls` — o
 arquivo que não contém dado de usuário nem lógica. Se é de formatação de
@@ -357,6 +360,31 @@ Ao mudar a política, rode o E2E: ele falha em qualquer violação de CSP
 durante o fluxo, e uma violação não aparece em teste unitário nenhum — o
 navegador só bloqueia e escreve no console.
 
+### O preview não pode voltar a depender do leitor de PDF do navegador
+
+Ele era um `<iframe>` com o PDF. No computador, funcionava; no celular, onde
+está boa parte do público, não: o Chrome do Android não mostra PDF dentro da
+página, e o Safari do iPhone mostra só a primeira. Hoje as páginas são
+desenhadas pelo PDF.js (`PaginasPdf.tsx`), e o `<iframe>` só entra se o
+PDF.js falhar. Três detalhes que parecem otimizáveis e quebram:
+
+- **O PDF.js recebe uma CÓPIA dos bytes.** Ele transfere o buffer para o
+  worker, e o original fica vazio — inclusive para o link de download.
+- **O build é o `legacy`.** O moderno exige navegador recente, e o público
+  inclui aparelhos antigos presos em versões velhas do iOS.
+- **As páginas novas entram todas de uma vez**, depois de prontas. Trocar uma
+  a uma faz a tela piscar a cada edição.
+
+A tela "gerando" não desenha o PDF: ela sai para o preview no instante em que
+ele fica pronto, e desenhar ali era desenhar duas vezes (medido).
+
+### Versões forçadas (`overrides`) têm prazo de validade
+
+`pnpm-workspace.yaml` força versões corrigidas de dependências INDIRETAS
+(postcss do Next, shell-quote do `gel`, …), cada uma com o motivo ao lado.
+Ao atualizar o pacote que as traz, rode `pnpm audit --prod` sem a linha: se
+continuar limpo, apague-a. Override esquecido vira a versão velha de amanhã.
+
 ### O E2E não apaga nada, e por isso cada teste usa IP e e-mail novos
 
 O banco do E2E pode ser o mesmo de ontem, com os contadores de limite de
@@ -485,6 +513,13 @@ Se algo em `apps/latex-worker/README.md` estiver errado, **corrija o
 comentário junto com o código** — os avisos de "não verificado" devem sumir
 quando deixarem de ser verdade, e os de "verificado" devem dizer com qual
 versão.
+
+**As dependências de DESENVOLVIMENTO ainda têm vulnerabilidades conhecidas**
+(10 em 14/10, 3 críticas), todas do Vitest 2 e do `drizzle-kit`. Nenhuma vai
+para produção — `pnpm audit --prod` está limpo — e as críticas exigem coisas
+que o projeto não usa (a interface web do Vitest). A correção é subir para o
+Vitest 4, uma versão major que mexe na configuração de testes dos seis
+pacotes; ficou como tarefa separada.
 
 **Nenhum modelo de IA de verdade foi chamado até hoje.** No `pnpm test` e no
 CI, a suíte de contrato de `packages/ai` roda contra o `MockAdapter`, em três
