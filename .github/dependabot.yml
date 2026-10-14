@@ -1,0 +1,29 @@
+# ==============================================================================
+#  Atualizações de dependências por PR.
+#
+#  O `pnpm audit` da avaliação de outubro achou 9 vulnerabilidades em
+#  dependências de produção que ninguém tinha visto — a mais antiga havia
+#  meses. Com isto, a atualização chega como PR, e o CI decide se ela entra.
+#
+#  Os PRs de SEGURANÇA são outra coisa: chegam pelo "Dependabot security
+#  updates" (GitHub → Settings → Code security), independentes deste arquivo e
+#  sem esperar o dia agendado. Ligue os dois.
+# ==============================================================================
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # Minor e patch num PR só: cinco PRs de patch por semana viram ruído, e
+    # ruído vira "aprovar sem olhar". Major vem separado, porque quebra.
+    groups:
+      menores:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
