@@ -9,6 +9,9 @@ coverage/
 .env.*.local
 !.env.example
 
+# Resultados dos testes de ponta a ponta (relatório, vídeos, log do app)
+e2e/resultados/
+
 # Next.js
 .next/
 out/

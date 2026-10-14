@@ -29,6 +29,9 @@
 apps/web
 !apps/web/package.json
 
+# Os testes de ponta a ponta rodam fora do contêiner, contra ele.
+e2e
+
 # Documentação e artefatos locais.
 *.md
 !apps/latex-worker/README.md
