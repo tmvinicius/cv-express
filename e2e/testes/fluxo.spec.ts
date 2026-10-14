@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { test, expect, type Page } from "@playwright/test";
 
-import { idDaSessao, linksEnviadosPara, novoContexto, vigiarProblemas } from "./ajuda";
+import {
+  idDaSessao,
+  linksEnviadosPara,
+  novoContexto,
+  tintaDasPaginas,
+  vigiarProblemas,
+} from "./ajuda";
 
 /**
  * O caminho principal, inteiro, como uma pessoa o percorre: começar,
@@ -74,6 +80,9 @@ test("do começo ao link do e-mail", async ({ browser }) => {
   await expect(baixar).toBeVisible({ timeout: 30_000 });
   // O PDF do Tectonic falso tem 2 páginas: o aviso precisa aparecer.
   await expect(pagina.getByText(/ficou com 2 páginas/)).toBeVisible();
+  // E as duas aparecem desenhadas pelo PDF.js, com conteúdo.
+  await expect(pagina.getByRole("img", { name: /Página \d de 2 do seu currículo/ })).toHaveCount(2);
+  for (const tinta of await tintaDasPaginas(pagina)) expect(tinta).toBeGreaterThan(0.005);
 
   const [download] = await Promise.all([pagina.waitForEvent("download"), baixar.click()]);
   expect(download.suggestedFilename()).toBe("curriculo-ana-souza.pdf");

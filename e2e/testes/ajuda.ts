@@ -82,3 +82,20 @@ export function idDaSessao(url: string): string {
   if (!id) throw new Error(`não é uma URL de currículo: ${url}`);
   return id;
 }
+
+/**
+ * Quanto de cada página desenhada no preview tem tinta (pixel escuro).
+ *
+ * Contar canvas não basta: uma página em branco também é um canvas. O texto
+ * do currículo fica em 1–5% da área; zero é desenho que falhou em silêncio.
+ */
+export async function tintaDasPaginas(pagina: Page): Promise<number[]> {
+  return pagina.$$eval(".preview__pagina", (canvas) =>
+    (canvas as HTMLCanvasElement[]).map((c) => {
+      const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+      let escuros = 0;
+      for (let i = 0; i < d.length; i += 16) if (d[i]! < 128) escuros++;
+      return escuros / (d.length / 16);
+    }),
+  );
+}
