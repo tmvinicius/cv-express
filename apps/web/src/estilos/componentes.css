@@ -830,6 +830,23 @@ select.campo__entrada {
   background: var(--cor-superficie-elevada);
 }
 
+/* As páginas desenhadas pelo PDF.js. O canvas tem a largura real em pixels
+   (vezes a densidade da tela); aqui ele só ocupa a coluna, sem esticar. */
+.preview__paginas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+.preview__pagina {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-sm);
+  box-shadow: var(--sombra-sutil);
+}
+
 .preview__vazio {
   aspect-ratio: 1 / 1.414;
   border: 1px dashed var(--cor-borda-forte);

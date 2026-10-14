@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { PaginasPdf } from "../preview/PaginasPdf";
+
 export type EstadoPreview =
   | { fase: "gerando" }
   | { fase: "pronto"; pdfBase64: string; paginas: number }
@@ -19,23 +21,16 @@ export type EstadoPreview =
 /**
  * Preview do PDF.
  *
- * ───────────────────────────────────────────────────────────────────────────
- * DECISÃO: `<iframe>` com blob, e não react-pdf
+ * As páginas são desenhadas pelo PDF.js (`preview/PaginasPdf.tsx`), e não
+ * pelo leitor de PDF do navegador num <iframe> — que era a versão anterior e
+ * não funcionava no celular: o Chrome do Android não mostra PDF dentro da
+ * página, e o Safari do iPhone mostra só a primeira. O motivo inteiro está
+ * no comentário de `PaginasPdf`.
  *
- * O planejamento prevê react-pdf (PDF.js) para o preview. Aqui o PDF é
- * exibido em um iframe apontando para uma blob URL.
- *
- * O motivo é escopo: react-pdf existe no plano para sustentar a sobreposição
- * de regiões clicáveis sobre o documento. Como a edição desta versão acontece
- * pelo painel lateral de seções — o "plano B" que o próprio planejamento
- * manda construir primeiro —, nada aqui precisa de acesso ao conteúdo
- * renderizado. O iframe entrega o mesmo resultado com zero dependências,
- * controles nativos de zoom e impressão, e sem o worker do PDF.js para
- * configurar.
- *
- * Quando a sobreposição entrar, react-pdf entra junto: é quando ele passa a
- * pagar o próprio custo.
- * ───────────────────────────────────────────────────────────────────────────
+ * O <iframe> continua aqui como PLANO B: se o PDF.js não carregar (rede
+ * instável no meio do download do script, navegador sem algum recurso), o
+ * computador ainda mostra o PDF pelo leitor dele. E o botão de baixar existe
+ * nos dois caminhos — é ele que nunca pode faltar.
  */
 export function Preview({
   estado,
@@ -46,7 +41,15 @@ export function Preview({
   nomeArquivo: string;
   aoTentarDeNovo?: () => void;
 }) {
-  const url = useBlobUrl(estado.fase === "pronto" ? estado.pdfBase64 : null);
+  const bytes = usePdfDecodificado(estado.fase === "pronto" ? estado.pdfBase64 : null);
+  const url = useBlobUrl(bytes);
+  const [pdfJsFalhou, setPdfJsFalhou] = useState(false);
+
+  // O último PDF bom, para o PDF.js manter as páginas na tela enquanto o
+  // próximo compila — o mesmo cuidado que `ultimaUrlBoa` tem com o link.
+  const ultimosBytes = useRef<Uint8Array | null>(null);
+  if (bytes) ultimosBytes.current = bytes;
+  const bytesExibidos = bytes ?? ultimosBytes.current;
 
   /**
    * O PDF anterior fica na tela enquanto o novo compila.
@@ -100,11 +103,15 @@ export function Preview({
           >
             Baixar currículo
           </a>
-          <iframe
-            src={urlExibida}
-            title="Pré-visualização do seu currículo"
-            className="preview__documento"
-          />
+          {bytesExibidos && !pdfJsFalhou ? (
+            <PaginasPdf bytes={bytesExibidos} aoFalhar={() => setPdfJsFalhou(true)} />
+          ) : (
+            <iframe
+              src={urlExibida}
+              title="Pré-visualização do seu currículo"
+              className="preview__documento"
+            />
+          )}
         </>
       ) : (
         // Sem PDF ainda e sem erro: só a mensagem de status acima.
@@ -115,42 +122,44 @@ export function Preview({
 }
 
 /**
- * Converte o base64 do worker em uma URL que o iframe consegue abrir.
+ * O base64 do worker, decodificado UMA vez por PDF.
+ *
+ * As páginas (PDF.js) e o link de download usam os mesmos bytes. Base64
+ * corrompido vira `null`: o preview mostra o estado vazio em vez de quebrar
+ * a página inteira.
+ */
+function usePdfDecodificado(base64: string | null): Uint8Array | null {
+  return useMemo(() => {
+    if (base64 === null) return null;
+    try {
+      return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    } catch {
+      return null;
+    }
+  }, [base64]);
+}
+
+/**
+ * Uma URL para o link de download (e para o <iframe> do plano B).
  *
  * A URL é revogada quando o PDF muda ou o componente sai da tela. Sem isso,
  * cada recompilação deixaria um PDF inteiro preso na memória do navegador —
  * e o preview recompila a cada edição.
  */
-function useBlobUrl(base64: string | null): string | null {
+function useBlobUrl(bytes: Uint8Array | null): string | null {
   const [url, setUrl] = useState<string | null>(null);
 
-  // Memo pelo conteúdo: recompilar com o mesmo resultado não recria o blob.
-  const chave = useMemo(() => base64, [base64]);
-
   useEffect(() => {
-    if (chave === null) {
+    if (bytes === null) {
       setUrl(null);
       return;
     }
-
-    let criada: string | null = null;
-
-    try {
-      const bytes = Uint8Array.from(atob(chave), (c) => c.charCodeAt(0));
-      criada = URL.createObjectURL(
-        new Blob([bytes as unknown as BlobPart], { type: "application/pdf" }),
-      );
-      setUrl(criada);
-    } catch {
-      // base64 corrompido: o preview mostra o estado vazio em vez de quebrar
-      // a página inteira.
-      setUrl(null);
-    }
-
-    return () => {
-      if (criada) URL.revokeObjectURL(criada);
-    };
-  }, [chave]);
+    const criada = URL.createObjectURL(
+      new Blob([bytes as unknown as BlobPart], { type: "application/pdf" }),
+    );
+    setUrl(criada);
+    return () => URL.revokeObjectURL(criada);
+  }, [bytes]);
 
   return url;
 }

@@ -78,7 +78,13 @@ export function Resultado({
           segundos.
         </p>
         {estado.fase === "gerando" && <NarracaoGeracao cv={cv} />}
-        <Preview estado={estado} nomeArquivo={nomeArquivo} aoTentarDeNovo={tentarDeNovo} />
+        {/* Só o status e o erro. Pronto, esta tela sai no mesmo instante para
+            o preview — desenhar o PDF aqui seria desenhá-lo duas vezes
+            (medido: o PDF.js baixava o worker e desenhava as páginas para
+            uma tela que já estava indo embora). */}
+        {estado.fase !== "pronto" && (
+          <Preview estado={estado} nomeArquivo={nomeArquivo} aoTentarDeNovo={tentarDeNovo} />
+        )}
       </div>
     );
   }
