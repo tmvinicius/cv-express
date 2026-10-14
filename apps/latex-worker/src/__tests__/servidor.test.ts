@@ -241,6 +241,28 @@ describe("erros", () => {
     expect(executor.chamadas).toBe(0);
   });
 
+  it("currículo grande demais: a mensagem é a do limite, sem caminho vazio", async () => {
+    // É o texto que a pessoa lê no preview; o limite de corpo do app web foi
+    // dimensionado para que este caso chegue até aqui.
+    const base = cvCompleto();
+    const modelo = base.experiencias[0]!;
+    const experiencias = Array.from({ length: 48 }, (_, i) => ({
+      ...modelo,
+      id: `exp-${i}`,
+      descricaoOriginal: "atendimento ao cliente e organização do estoque ".repeat(100).slice(0, 4900),
+    }));
+    const r = await app.inject({
+      method: "POST",
+      url: "/compilar",
+      headers: AUTH,
+      payload: { cv: { ...base, experiencias } },
+    });
+
+    expect(r.statusCode).toBe(400);
+    expect(r.json().mensagem).toMatch(/^O currículo tem \d+KB, acima do limite de 200KB/);
+    expect(executor.chamadas).toBe(0);
+  });
+
   it("400 quando falta o campo cv", async () => {
     const r = await app.inject({
       method: "POST",

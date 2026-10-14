@@ -66,9 +66,14 @@ export class ServicoCompilacao {
       const primeiro = validado.error.issues[0];
       throw new ErroDeCompilacao(
         "DADOS_INVALIDOS",
-        primeiro
-          ? `Currículo inválido em "${primeiro.path.join(".")}": ${primeiro.message}`
-          : "Currículo inválido.",
+        !primeiro
+          ? "Currículo inválido."
+          : primeiro.path.length > 0
+            ? `Currículo inválido em "${primeiro.path.join(".")}": ${primeiro.message}`
+            : // Erro do documento inteiro, como o de tamanho total: a mensagem
+              // já diz o que fazer, e é ela que a pessoa lê no preview. Antes
+              // saía 'Currículo inválido em "": O currículo tem 233KB…'.
+              primeiro.message,
         requestId,
         400,
       );
