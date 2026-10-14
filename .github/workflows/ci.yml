@@ -1,0 +1,108 @@
+# ==============================================================================
+#  CI — o mesmo portão que se roda antes de entregar, a cada push e PR.
+#
+#  O `main` chegou a ficar quebrado duas vezes sem ninguém perceber: o
+#  typecheck falhando, e a página do link do e-mail no diretório errado (o
+#  build quebrava e todo link enviado daria 404). Os dois seriam pegos aqui.
+#
+#  Dois jobs em paralelo, porque falham por motivos diferentes:
+#    - verificar: build, tipos, lint, testes e o `next build` (verificar:completo);
+#    - e2e: um navegador percorrendo o produto contra Postgres, worker e app.
+#
+#  Não há segredo nenhum aqui. A IA roda no modo mock, o e-mail no console e o
+#  Tectonic é o falso de e2e/: nada pago, nada que dependa de chave.
+# ==============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Só leitura: este workflow não comenta, não publica e não faz push.
+permissions:
+  contents: read
+
+# Um push novo no mesmo PR cancela a execução anterior, que já não diz nada.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: build, tipos, lint e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # A versão do pnpm vem do `packageManager` do package.json — a mesma de
+      # quem desenvolve. O `pnpm/setup`, sucessor desta action, exige pnpm 11.
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # --frozen-lockfile: um package.json que mudou sem o lockfile acompanhar
+      # falha aqui, e não na implantação.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run verificar:completo
+
+  e2e:
+    name: ponta a ponta (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cvexpress
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: cvexpress
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cvexpress -d cvexpress"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # As migrações são aplicadas pelo próprio E2E ao subir o app.
+      DATABASE_URL: postgres://cvexpress:ci@localhost:5432/cvexpress
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - run: pnpm install --frozen-lockfile
+
+      # O E2E roda contra o build de PRODUÇÃO do app e o `dist/` do worker.
+      - run: pnpm run build && pnpm run build:apps
+
+      # O Chromium da mesma versão do @playwright/test, com as bibliotecas do
+      # sistema que ele precisa.
+      - run: pnpm --filter @cv-express/e2e exec playwright install --with-deps chromium
+
+      - run: pnpm run e2e
+
+      # Na falha: relatório, trace, capturas de tela e o log do app — que é
+      # onde está o motivo quando o problema é do servidor.
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: e2e-resultados
+          path: e2e/resultados/
+          retention-days: 7
