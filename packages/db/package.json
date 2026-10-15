@@ -23,7 +23,7 @@
   "dependencies": {
     "@cv-express/schema": "workspace:*",
     "drizzle-orm": "^0.45.4",
-    "nanoid": "^5.0.9"
+    "nanoid": "^6.0.2"
   },
   "peerDependencies": {
     "pg": "^8.13.0"
