@@ -137,3 +137,16 @@ describe("relatório de contraste", () => {
     expect(linhas.length).toBeGreaterThan(0);
   });
 });
+
+describe("o CSS não contorna a suíte de contraste", () => {
+  it("não usa opacity — ela muda a cor que se vê sem mudar a cor declarada", async () => {
+    // A suíte acima mede os PARES da paleta. Um `opacity: 0.55` num texto em
+    // cor suave deixava o rótulo da trilha com 2,48:1 (medido com axe) — e
+    // esta suíte aprovava, porque a cor declarada continuava sendo a suave.
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const css = readFileSync(join(__dirname, "..", "componentes.css"), "utf8");
+    const semComentarios = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(semComentarios.match(/opacity\s*:[^;]+;/g) ?? []).toEqual([]);
+  });
+});

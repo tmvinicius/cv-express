@@ -31,9 +31,14 @@ export function BarraProgresso({ progresso }: { progresso: Progresso }) {
         {/* Fora das seis etapas de preenchimento (gerando,
             preview) não existe "Etapa X de 6" para mostrar — anunciar uma
             posição ali era parte da contradição. */}
-        <span>
+        {/* O <h1> da página: diz onde a pessoa está, e o <h2> de cada etapa
+            vem logo abaixo. Sem ele, quem navega por títulos no leitor de tela
+            não tinha por onde começar (achado do axe, `page-has-heading-one`).
+            Fica com a aparência discreta que já tinha — o destaque visual da
+            tela continua sendo o título da etapa. */}
+        <h1 className="barra-progresso__titulo">
           {naTrilha ? `Etapa ${posicaoAtual} de ${totalDeEtapas}: ${rotuloAtual}` : rotuloAtual}
-        </span>
+        </h1>
         <span>{contagem}</span>
       </div>
 

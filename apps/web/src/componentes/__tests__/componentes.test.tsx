@@ -174,6 +174,13 @@ describe("BarraProgresso", () => {
     expect(screen.queryByText(/etapa \d+ de/i)).toBeNull();
     expect(screen.getByText("Seu currículo")).toBeDefined();
   });
+
+  it("a posição na trilha é o <h1> da página — o título de cada etapa vem abaixo", () => {
+    // Sem um <h1>, quem navega por títulos no leitor de tela não tinha por
+    // onde começar em nenhuma etapa do formulário (axe, page-has-heading-one).
+    render(<BarraProgresso progresso={progresso({})} />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/^Etapa \d+ de \d+: /);
+  });
 });
 
 describe("IndicadorAutosave", () => {

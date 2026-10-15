@@ -148,6 +148,14 @@ button:disabled {
   color: var(--cor-texto-suave);
 }
 
+/* É o <h1> da página, mas com o corpo do rótulo: herda tamanho, peso e cor. */
+.barra-progresso__titulo {
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  line-height: inherit;
+}
+
 .barra-progresso__trilho {
   height: 6px;
   background: var(--cor-superficie);
@@ -255,7 +263,6 @@ button.trilha__alvo:hover {
   display: block;
   font-size: var(--texto-xs);
   color: var(--cor-texto-suave);
-  opacity: 0.85;
 }
 
 /* ─── estados ─────────────────────────────────────────────────────────── */
@@ -291,8 +298,13 @@ button.trilha__alvo:hover {
   color: var(--cor-fundo);
 }
 
-.trilha__etapa--inalcancavel .trilha__alvo {
-  opacity: 0.55;
+/* Inalcançável: a etapa ainda não abre. O que diz isso é o elemento — um
+   <span> em vez de botão, e a descrição que o leitor de tela ouve —, e a
+   marca pontilhada reforça para quem vê. NÃO use opacidade: ela clareava o
+   rótulo para 2,48:1 (medido com axe), abaixo dos 4,5:1 do AA, e passava
+   por fora da suíte de contraste, que mede as cores declaradas. */
+.trilha__etapa--inalcancavel .trilha__marca {
+  border-style: dotted;
 }
 
 /* ─── estreito: bolinhas, e o rótulo só de onde a pessoa está ─────────── */
