@@ -7,7 +7,7 @@ import {
   type Banco,
 } from "@cv-express/db";
 
-import { autorizarNovaSessao } from "./cotas";
+import { autorizarNovaSessao, autorizarSalvamento } from "./cotas";
 
 /**
  * Operações de sessão do formulário.
@@ -19,7 +19,11 @@ import { autorizarNovaSessao } from "./cotas";
 
 export type ResultadoSalvar =
   | { ok: true; salvoEm: string }
-  | { ok: false; motivo: "sessao_ausente" | "dados_invalidos"; detalhe?: string };
+  | {
+      ok: false;
+      motivo: "sessao_ausente" | "dados_invalidos" | "muitos_salvamentos";
+      detalhe?: string;
+    };
 
 /**
  * Autosave de uma etapa.
@@ -93,6 +97,24 @@ export async function salvarEtapa(
   if (!gravou) return { ok: false, motivo: "sessao_ausente" };
 
   return { ok: true, salvoEm: agora.toISOString() };
+}
+
+/**
+ * O autosave que vem do navegador: `salvarEtapa`, com limite por sessão.
+ *
+ * Separado de `salvarEtapa` porque o "Concluir e salvar" também grava, e tem
+ * os seus próprios limites — não pode gastar a cota do autosave nem ser
+ * barrado por ela.
+ */
+export async function salvarDoNavegador(
+  db: Banco,
+  sessionId: string,
+  cv: CvData,
+  agora: Date = new Date(),
+): Promise<ResultadoSalvar> {
+  const autorizacao = await autorizarSalvamento(db, sessionId, agora);
+  if (autorizacao !== "ok") return { ok: false, motivo: autorizacao };
+  return salvarEtapa(db, sessionId, cv, agora);
 }
 
 /**

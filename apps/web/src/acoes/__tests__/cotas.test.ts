@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { esquema, aplicarMigracoes, cvSessions, type Banco } from "@cv-express/db";
+import { esquema, aplicarMigracoes, cvSessions, limitesEnvio, type Banco } from "@cv-express/db";
 
 import {
   autorizarIa,
@@ -11,9 +11,10 @@ import {
   COTAS_IA,
   COTAS_COMPILACAO,
   LIMITE_SESSOES_POR_ORIGEM,
+  LIMITE_SALVAMENTOS_POR_SESSAO,
   TETO_DIARIO_IA_PADRAO,
 } from "../cotas";
-import { comecar, iniciarSessao } from "../sessao";
+import { comecar, iniciarSessao, salvarDoNavegador, carregarSessao } from "../sessao";
 import { mensagemDeFalhaIa, podeTentarDeNovo } from "../../componentes/mensagensIa";
 
 let pg: PGlite;
@@ -206,6 +207,35 @@ describe("compilação", () => {
     const r = await autorizarCompilacao(db, id, IP, AGORA);
     expect(r?.codigo).toBe("ERRO_INTERNO");
     expect(r?.mensagem).not.toMatch(/banco|postgres|ECONN/i);
+  });
+});
+
+describe("autosave: limite por sessão", () => {
+  it(`grava até ${LIMITE_SALVAMENTOS_POR_SESSAO.maximo} vezes por hora e recusa a seguinte, sem gravar`, async () => {
+    // Antes não havia limite nenhum: um laço numa sessão era uma escrita de
+    // até 500 KB no banco por pedido, para sempre.
+    const id = await sessao();
+    const cv = (await carregarSessao(db, id, AGORA))!.data;
+    for (let i = 0; i < LIMITE_SALVAMENTOS_POR_SESSAO.maximo; i++) {
+      const r = await salvarDoNavegador(db, id, { ...cv, objetivo: { texto: `v${i}` } }, AGORA);
+      if (!r.ok) throw new Error(`recusou a gravação ${i}: ${r.motivo}`);
+    }
+    const recusada = await salvarDoNavegador(db, id, { ...cv, objetivo: { texto: "a mais" } }, AGORA);
+    expect(recusada).toEqual({ ok: false, motivo: "muitos_salvamentos" });
+    expect((await carregarSessao(db, id, AGORA))!.data.objetivo.texto).toBe(
+      `v${LIMITE_SALVAMENTOS_POR_SESSAO.maximo - 1}`,
+    );
+
+    // Na hora seguinte, volta.
+    const depois = new Date(AGORA.getTime() + LIMITE_SALVAMENTOS_POR_SESSAO.janelaMs);
+    expect((await salvarDoNavegador(db, id, cv, depois)).ok).toBe(true);
+  }, 120_000);
+
+  it("id inventado não grava nem cria contador — sortear ids não enche a tabela", async () => {
+    const r = await salvarDoNavegador(db, "inventado-xxxxxxxxxxxx", { ...(await carregarSessao(db, await sessao(), AGORA))!.data }, AGORA);
+    expect(r).toEqual({ ok: false, motivo: "sessao_ausente" });
+    const contadores = await db.select().from(limitesEnvio);
+    expect(contadores.some((c) => c.chave.startsWith("salvar-sessao:"))).toBe(false);
   });
 });
 

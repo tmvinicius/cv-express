@@ -63,6 +63,18 @@ export const COTAS_COMPILACAO = {
   porOrigem: { janelaMs: HORA, maximo: 600 },
 } as const satisfies Record<string, Regra>;
 
+/**
+ * Gravações do autosave por sessão. O autosave espera 800 ms de pausa e grava
+ * uma vez por vez: quem digita rápido, com pausa a cada poucas palavras,
+ * chega a umas 30 por minuto em rajadas. 1.800 por hora é esse ritmo durante
+ * uma hora inteira — e ainda assim 60 vezes menos do que um script em laço.
+ *
+ * Sem limite por origem, de propósito: cada gravação só toca o currículo da
+ * própria sessão, e uma sala de aula atrás do mesmo IP grava muito. Quem
+ * quisesse multiplicar sessões esbarra no limite de sessões novas por origem.
+ */
+export const LIMITE_SALVAMENTOS_POR_SESSAO: Regra = { janelaMs: HORA, maximo: 1_800 };
+
 /** Sessões novas por origem. Uma turma inteira começando junto cabe. */
 export const LIMITE_SESSOES_POR_ORIGEM: Regra = { janelaMs: HORA, maximo: 60 };
 
@@ -191,6 +203,29 @@ export async function autorizarCompilacao(
       mensagem: "O gerador de PDF não está disponível agora. Seu currículo está salvo.",
     };
   }
+}
+
+/**
+ * Pode gravar o currículo desta sessão agora?
+ *
+ * A sessão é conferida ANTES de contar: com um id inventado, o contador
+ * ganharia uma linha por pedido, e quem quisesse encher a tabela só teria de
+ * sortear ids. Sem falha fechada própria: o banco que conta é o mesmo que
+ * grava, então se ele não responde a gravação também não aconteceria.
+ */
+export async function autorizarSalvamento(
+  db: Banco,
+  sessionId: string,
+  agora: Date = new Date(),
+): Promise<"ok" | "sessao_ausente" | "muitos_salvamentos"> {
+  if (!(await sessaoAtiva(db, sessionId, agora))) return "sessao_ausente";
+  const cabe = await consumirLimite(
+    db,
+    chaveDeLimite("salvar-sessao", sessionId),
+    LIMITE_SALVAMENTOS_POR_SESSAO,
+    agora,
+  );
+  return cabe ? "ok" : "muitos_salvamentos";
 }
 
 /**
