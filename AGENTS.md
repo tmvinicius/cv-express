@@ -14,7 +14,7 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar            # build + typecheck + lint + testes — 775 testes
+pnpm run verificar            # build + typecheck + lint + testes — 792 testes
 pnpm run verificar:completo   # o mesmo + build do worker e `next build`
 pnpm run e2e                  # navegador de verdade; precisa de build e DATABASE_URL
 ```
@@ -143,14 +143,17 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Trocar de provider (roteiro e contrato contra provider real) | `packages/ai/README.md` |
 | Tabelas e migração | `packages/db/src/esquema.ts`, `packages/db/migrations/` |
 | Aplicar migrações (`pnpm migrar`) | `packages/db/src/cli/migrar.ts` |
-| Variáveis de ambiente do web, comentadas | `apps/web/.env.example` |
+| Variáveis de ambiente do web, comentadas (e o teste que as mantém completas) | `apps/web/.env.example`, `apps/web/src/__tests__/envExemplo.test.ts` |
 | Privacidade, "apagar meus dados", currículo inexistente | `apps/web/src/app/privacidade/`, `componentes/ApagarMeusDados.tsx`, `app/dados-apagados/`, `app/cv/[id]/not-found.tsx` |
 | Sessões, link mágico, limites de uso | `packages/db/src/` |
 | Regra do "Concluir e salvar" (prazo de 5 dias, link reutilizável) | `packages/db/src/linkMagico.ts` |
 | Envio de e-mail (Resend, console) e o texto do e-mail | `apps/web/src/email/` |
 | Limite de envio (contador no Postgres) | `packages/db/src/limites.ts` |
 | Quantos e-mails por IP e por destinatário | `apps/web/src/acoes/concluir.ts` (`LIMITE_POR_*`) |
-| Cotas da IA e da compilação, teto diário da IA, sessões novas por IP | `apps/web/src/acoes/cotas.ts` |
+| Cotas da IA e da compilação, teto diário da IA, sessões novas por IP, limite do autosave | `apps/web/src/acoes/cotas.ts` |
+| O autosave que vem do navegador (cota + gravação) | `apps/web/src/acoes/sessao.ts` (`salvarDoNavegador`) |
+| Tokens gastos pela IA, por dia: onde se anota / onde fica | `apps/web/src/acoes/ia.ts` (`anotarUso`) / `packages/db/src/usoIa.ts`, tabela `uso_ia` |
+| Acessibilidade medida no navegador (axe) | `e2e/testes/acessibilidade.spec.ts` |
 | Título, descrição e prévia de compartilhamento (Open Graph), ícone | `apps/web/src/compartilhamento/metadados.ts`, `app/opengraph-image.tsx`, `app/icon.svg` |
 | Cabeçalhos de segurança (fixos) e a CSP com nonce | `apps/web/src/seguranca/cabecalhos.ts`; aplicados em `next.config.ts` e `src/middleware.ts` |
 | Página de erro e 404 genérico | `apps/web/src/app/error.tsx`, `app/not-found.tsx` |
@@ -238,6 +241,19 @@ otimizáveis sem ser:
 E nenhum GET cria sessão. A sessão nasce no POST do botão "Começar", com
 limite por IP; uma página que crie sessão ao abrir volta a gravar uma linha
 por robô e devolve ao atacante sessões de graça para rodar as cotas.
+
+O autosave também tem porta: a Server Action de salvar chama
+`salvarDoNavegador`, que confere a sessão e conta o salvamento antes de
+gravar. Era a única ação pública que escrevia no banco sem contar nada. O
+`salvarEtapa` continua existindo para quem já passou por outra porta (o
+"Concluir e salvar", com os limites de envio) — uma Server Action nova que
+grave o currículo usa o `salvarDoNavegador`, não o `salvarEtapa` direto.
+
+**Uso da IA:** cada chamada anota os tokens na tabela `uso_ia`, somados por
+dia e operação, inclusive na falha. A anotação nunca derruba a resposta: se
+o banco falha, a sugestão chega e o log diz o que faltou. A tabela não tem
+texto, sessão nem IP, e por isso fica fora do expurgo — não acrescente
+coluna que identifique alguém sem colocá-la no expurgo e em `/privacidade`.
 
 **Rotas e o link do e-mail:** a página do link mora em
 `app/retomar/[token]/`, porque é o caminho que `concluir.ts` põe no e-mail.
@@ -378,6 +394,29 @@ PDF.js falhar. Três detalhes que parecem otimizáveis e quebram:
 A tela "gerando" não desenha o PDF: ela sai para o preview no instante em que
 ele fica pronto, e desenhar ali era desenhar duas vezes (medido).
 
+### `opacity` em texto contorna a suíte de contraste
+
+A suíte de `estilos/` mede as cores DECLARADAS na paleta. Um `opacity: 0.55`
+no rótulo da trilha mistura o texto com o fundo e o deixou em 2,48:1 (o AA
+pede 4,5:1), com a suíte verde. Para marcar estado (etapa ainda não
+alcançável, item opcional), use forma — borda pontilhada, peso, ícone —, não
+transparência. Há um teste que reprova `opacity:` em `componentes.css`, e o
+axe do E2E mede o que o navegador desenha. Se um dia precisar de
+transparência num elemento sem texto, mude o teste com o motivo ao lado.
+
+Do mesmo jeito, cada tela de etapa tem um `<h1>` (a posição na trilha, em
+`BarraProgresso.tsx`): é por ele que o leitor de tela anuncia onde a pessoa
+está. Não o troque por `<span>` para "acertar o tamanho" — o CSS já o deixa
+com a aparência de antes.
+
+### Falha da IA também gasta token
+
+O `Resultado` de `packages/ai` traz `uso` nos dois ramos, sucesso e falha. Uma
+sugestão descartada pelo guardrail já pagou as duas tentativas, e é
+justamente o caso caro. Um caminho de falha novo em `servico.ts` precisa
+devolver o que já foi gasto até ali; devolver zero faria a tabela `uso_ia`
+subestimar o custo exatamente quando o modelo se comporta mal.
+
 ### Versões forçadas (`overrides`) têm prazo de validade
 
 `pnpm-workspace.yaml` força versões corrigidas de dependências INDIRETAS
@@ -485,7 +524,9 @@ leva direto ao item. O que ainda falta:
 5. A imagem do worker construída com o Tectonic 0.17.0 e um PDF de verdade
    gerado por ela.
 6. `IA_TETO_DIARIO` ajustado ao orçamento da IA. O padrão (1000 pedidos por
-   dia) é um número de partida, não uma medida de custo.
+   dia) é um número de partida, não uma medida de custo. A medida passa a
+   existir com o primeiro dia de uso real, na tabela `uso_ia` (consulta no
+   README).
 7. O CI rodando verde no GitHub — ele foi escrito e validado com actionlint,
    mas nunca executou lá — e o `main` protegido para exigi-lo antes do merge.
 

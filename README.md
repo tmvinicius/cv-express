@@ -55,7 +55,7 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 | Worker         | Fastify 5                             |                                                                   |
 | IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
 | Preview        | PDF.js (build legacy)                 | As páginas desenhadas em canvas: funciona no celular, onde o leitor de PDF do navegador não existe |
-| Testes         | Vitest 2, Testing Library, PGlite     | 775 testes; o banco de teste é Postgres de verdade, em memória    |
+| Testes         | Vitest 2, Testing Library, PGlite     | 792 testes; o banco de teste é Postgres de verdade, em memória    |
 | Ponta a ponta  | Playwright                            | Navegador real contra app, worker e Postgres; roda no CI          |
 | Ids            | nanoid                                | Ids estáveis por item de lista                                    |
 
@@ -113,12 +113,12 @@ Isso roda build, typecheck, lint e testes, nessa ordem. O esperado:
 ```
 packages/schema        38 testes
 packages/templates    116 testes
-packages/ai            77 testes
-packages/db            57 testes
+packages/ai            80 testes
+packages/db            60 testes
 apps/latex-worker      52 testes
-apps/web              435 testes
+apps/web              446 testes
 ─────────────────────────────────
-total                 775 testes
+total                 792 testes
 ```
 
 O build vem antes porque os pacotes se importam via `dist/` — um build velho
@@ -134,7 +134,10 @@ Um navegador percorre o produto como uma pessoa: começar, preencher, pedir
 ajuda à IA, gerar, baixar o PDF, concluir e voltar pelo link do e-mail em
 outro navegador. Também conferem que abrir a página inicial não grava nada,
 que o "Começar" funciona sem JavaScript, os cabeçalhos de segurança, o 404
-em português e a prévia de compartilhamento (tags e imagem).
+em português e a prévia de compartilhamento (tags e imagem). E passam o axe
+(WCAG 2.1 A e AA, mais as boas práticas) em nove telas, do início ao
+preview: ele mede o contraste do que o navegador desenha, e não só o das
+cores declaradas na paleta.
 
 ```bash
 docker compose up -d postgres            # ou qualquer Postgres
@@ -213,13 +216,17 @@ indisponível, com "tentar de novo" — sem perder nada do que foi preenchido.
 Estas são todas as que o código lê. O
 [`apps/web/.env.example`](./apps/web/.env.example) traz a mesma lista,
 comentada e com valores que batem com o compose: copie para
-`apps/web/.env.local` e o `pnpm dev` já sobe configurado.
+`apps/web/.env.local` e o `pnpm dev` já sobe configurado. Um teste
+(`apps/web/src/__tests__/envExemplo.test.ts`) reprova se o código passar a
+ler uma variável que o arquivo não lista, ou se o arquivo listar uma que
+ninguém lê.
 
 | Variável            | Obrigatória | Para quê                                                        |
 | ------------------- | ----------- | --------------------------------------------------------------- |
 | `DATABASE_URL`      | sim         | Conexão com o Postgres. Sem ela, nenhuma página abre            |
 | `AI_PROVIDER`       | não         | `anthropic` (padrão), `openai-compativel` ou `mock`             |
 | `ANTHROPIC_API_KEY` | com `anthropic` | Lida pelo SDK quando `AI_API_KEY` não é informada           |
+| `ANTHROPIC_AUTH_TOKEN` | com `anthropic` | Alternativa às duas acima, na mesma ordem de prioridade |
 | `AI_MODEL`          | com `openai-compativel` | Id do modelo. Com `anthropic`, o padrão é `claude-opus-5` |
 | `AI_BASE_URL`       | com `openai-compativel` | Ex.: `http://localhost:11434/v1` (Ollama)           |
 | `AI_API_KEY`        | não         | Chave explícita; opcional em modelo local                       |
@@ -256,7 +263,17 @@ e-mail (vale entre instâncias e sobrevive a reinícios):
 | -------------------- | -------------- | -------------- | --------------------------------- |
 | Pedido à IA          | 15 por hora    | 100 por hora   | `IA_TETO_DIARIO` por dia (UTC)    |
 | Geração do PDF       | 120 por hora   | 600 por hora   | —                                 |
+| Salvamento automático | 1.800 por hora | —             | —                                 |
 | Começar um currículo | —              | 60 por hora    | —                                 |
+
+O salvamento automático dispara 800 ms depois da última tecla, então quem
+digita sem parar fica perto de 30 por minuto — o limite é o dobro disso,
+sustentado por uma hora. Ele existe porque era a única ação pública que
+escrevia no banco sem contar nada: um script podia regravar o mesmo
+currículo de 200 KB sem parar. Não há limite por IP de propósito: uma sala
+de aula inteira atrás do mesmo IP salva junto. Quem passa do limite não
+perde o que digitou: o indicador mostra que não salvou, o texto continua na
+tela, e a primeira edição depois da janela grava o currículo inteiro.
 
 Ao atingir o teto do dia, a ajuda da IA aparece como **pausada até amanhã**,
 não como erro: o currículo sai igual sem ela. O teto conta pedidos, não
@@ -264,6 +281,33 @@ tokens — cada pedido já é limitado no serviço (resposta de no máximo 2.000
 tokens, uma nova tentativa no máximo) —, então o gasto diário fica abaixo de
 `IA_TETO_DIARIO × 2 × (entrada + 2.000 tokens de saída)`. Ajuste o número ao
 orçamento.
+
+### Quanto a IA está gastando
+
+Cada pedido à IA soma os tokens numa linha por dia (UTC) e por operação, na
+tabela `uso_ia` — inclusive os que falharam, porque uma sugestão descartada
+pelo guardrail já pagou as tentativas. A tabela não guarda texto, sessão nem
+IP, só números, e o expurgo não a apaga: é o histórico de custo. Cada
+chamada também escreve uma linha `[ia] uso` no log.
+
+```sql
+-- Os últimos 14 dias: pedidos, falhas e tokens.
+SELECT dia, operacao, chamadas, falhas, tokens_entrada, tokens_saida
+FROM uso_ia
+WHERE dia > current_date - 14
+ORDER BY dia DESC, operacao;
+
+-- Média por pedido: o número que transforma IA_TETO_DIARIO em dinheiro.
+SELECT operacao,
+       round(sum(tokens_entrada)::numeric / nullif(sum(chamadas), 0)) AS entrada_por_pedido,
+       round(sum(tokens_saida)::numeric / nullif(sum(chamadas), 0))   AS saida_por_pedido
+FROM uso_ia
+GROUP BY operacao;
+```
+
+Multiplique a média pelo preço por token do modelo e pelo teto: é o gasto
+máximo de um dia. Os primeiros dias de uso real dizem se o padrão de 1000
+pedidos cabe no orçamento.
 
 Se o banco não responde, a IA e a geração recusam em vez de seguir sem
 contar. E nenhum GET cria sessão: robôs de busca e pré-visualizações de link
@@ -335,24 +379,27 @@ no servidor, como deve.
 | `packages/schema` — CvData, limites, FieldId, contrato    | ✅ 38 testes                         |
 | `packages/templates` — escape, motor, template, fixtures  | ✅ 116 testes                        |
 | `packages/i18n` — rótulos pt-BR                           | ✅                                   |
-| `packages/ai` — serviço, adapters, guardrails             | ✅ 77 testes contra o mock; contrato contra provider real pronto ([roteiro](./packages/ai/README.md)), nunca rodado contra um modelo |
-| `packages/db` — sessões, link mágico, limites de uso      | ✅ 57 testes, contra Postgres real   |
+| `packages/ai` — serviço, adapters, guardrails             | ✅ 80 testes contra o mock; contrato contra provider real pronto ([roteiro](./packages/ai/README.md)), nunca rodado contra um modelo |
+| `packages/db` — sessões, link mágico, limites de uso      | ✅ 60 testes, contra Postgres real   |
 | `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 51 testes                         |
 | `apps/web` — 6 etapas, trilha, autosave, sugestões de IA  | ✅ roda localmente                   |
-| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 424 testes no app; fluxo verificado no navegador |
+| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 446 testes no app; fluxo verificado no navegador |
 | Compilação real `.tex → PDF`                              | ✅ verificada com Tectonic 0.17.0    |
 | Imagem Docker do worker com 0.17.0                        | ⚠️ nunca construída                 |
 | Tela "gerando" com narração em etapas                     | ✅                                   |
 | LGPD — apagar meus dados, página de privacidade           | ✅ verificado no navegador; texto sem revisão jurídica |
-| Script de migração e `.env.example`                       | ✅ `pnpm migrar` verificado em Postgres real |
+| Script de migração e `.env.example`                       | ✅ `pnpm migrar` verificado em Postgres real; teste cobra que o `.env.example` lista tudo o que o código lê |
 | "Concluir e salvar" — e-mail com link de 5 dias           | ✅ verificado no navegador, com e-mail no modo `console` |
 | Limite de envio por IP e por destinatário                 | ✅ verificado no navegador e em Postgres real |
 | Cotas de IA e de geração, teto diário da IA, página inicial | ✅ verificado no navegador e em Postgres real |
+| Limite do salvamento automático por sessão                | ✅ testado contra Postgres (PGlite)  |
+| Uso de tokens da IA anotado por dia (`uso_ia`)            | ✅ testado contra o mock; nenhum token de verdade gasto ainda |
+| Acessibilidade medida pelo axe (WCAG 2.1 AA) no E2E       | ✅ 9 telas sem violação; leitor de tela de verdade nunca usado |
 | Expurgo diário agendado                                   | ✅ rota verificada; agendamento da Vercel nunca executado |
 | Envio real pelo Resend                                    | ⚠️ nunca executado                  |
 | Cabeçalhos de segurança e CSP com nonce                   | ✅ verificados no navegador, sem violação no fluxo |
 | Página de erro e 404 em português                         | ✅ verificados com o banco fora do ar |
-| Testes de ponta a ponta (Playwright)                      | ✅ 8 testes, verdes localmente      |
+| Testes de ponta a ponta (Playwright)                      | ✅ 9 testes, verdes localmente      |
 | Preview do PDF no celular (PDF.js)                        | ✅ Chromium com tela de Pixel 7; aparelho de verdade nunca testado |
 | Dependências de produção sem vulnerabilidade conhecida    | ✅ `pnpm audit --prod` limpo em 14/10; Dependabot configurado |
 | Prévia de compartilhamento (Open Graph) e ícone           | ✅ tags e imagem conferidas; prévia num app de mensagem nunca vista |
@@ -374,7 +421,9 @@ O código da V1 está completo. O que falta é configuração e conferência:
 5. A imagem do worker construída com o Tectonic 0.17.0 e um PDF de verdade
    gerado por ela.
 6. `IA_TETO_DIARIO` ajustado ao orçamento da IA (o padrão é 1000 pedidos por
-   dia) e o aviso `[cotas] teto diário da IA atingido` acompanhado no log.
+   dia), com a média de tokens por pedido dos primeiros dias tirada da
+   tabela `uso_ia` (consulta em "Quanto a IA está gastando"), e o aviso
+   `[cotas] teto diário da IA atingido` acompanhado no log.
 7. O CI verde no GitHub, e o `main` protegido para exigi-lo antes do merge
    (Settings → Branches). Sem a proteção, o CI avisa mas não impede.
 8. Com o domínio no ar e `APP_URL` apontando para ele, colar o link num
