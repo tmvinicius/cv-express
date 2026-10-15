@@ -136,6 +136,8 @@ export function criarServicoIa(
             e instanceof AiError
               ? e
               : new AiError("INDISPONIVEL", "Falha ao chamar o provider.", String(e)),
+          // O que a tentativa anterior já gastou, se houve uma.
+          uso: { entrada: entradaTotal, saida: saidaTotal },
         };
       }
 
@@ -174,6 +176,7 @@ export function criarServicoIa(
         "O modelo não devolveu o formato esperado.",
         ultimoErro,
       ),
+      uso: { entrada: entradaTotal, saida: saidaTotal },
     };
   }
 
@@ -187,6 +190,7 @@ export function criarServicoIa(
         "COTA_DA_SESSAO",
         "Você já usou o polimento várias vezes. Tente de novo em alguns minutos.",
       ),
+      uso: { entrada: 0, saida: 0 },
     };
   }
 
@@ -233,6 +237,8 @@ export function criarServicoIa(
             "A sugestão não respeitou o texto original e foi descartada.",
             violacao.mensagem,
           ),
+          // Descartada, mas paga: os tokens foram gastos do mesmo jeito.
+          uso: resultado.uso,
         };
       }
 
@@ -273,6 +279,7 @@ export function criarServicoIa(
             "A sugestão trouxe habilidades que você não informou e foi descartada.",
             violacao.mensagem,
           ),
+          uso: resultado.uso,
         };
       }
 

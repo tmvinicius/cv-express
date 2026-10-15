@@ -241,3 +241,42 @@ describe("contabilidade de tokens", () => {
     }
   });
 });
+
+describe("o uso de tokens também volta na falha", () => {
+  /**
+   * As chamadas que falham são justamente as caras: o guardrail descarta
+   * depois de o modelo responder, e a saída inválida gasta duas tentativas.
+   * Sem o uso na falha, a conta do dia sairia menor que a fatura.
+   * O mock reporta 100 de entrada e 50 de saída por chamada.
+   */
+  const entrada = { cargo: "Atendente", descricao: "atendia clientes no balcão" };
+
+  it("guardrail: a sugestão é descartada, mas os tokens aparecem", async () => {
+    const servico = criarServicoIa(
+      new MockAdapter({ respostas: ['{"bullets":["Atendi 500 clientes por dia"]}'] }),
+    );
+    const r = await servico.polirExperiencia(entrada);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.erro.codigo).toBe("GUARDRAIL");
+      expect(r.uso).toEqual({ entrada: 100, saida: 50 });
+    }
+  });
+
+  it("saída inválida: soma as duas tentativas", async () => {
+    const servico = criarServicoIa(new MockAdapter({ respostas: ["isto não é JSON"] }));
+    const r = await servico.polirExperiencia(entrada);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.erro.codigo).toBe("SAIDA_INVALIDA");
+      expect(r.uso).toEqual({ entrada: 200, saida: 100 });
+    }
+  });
+
+  it("provider fora do ar: nada foi gasto, e o uso diz zero", async () => {
+    const servico = criarServicoIa(new MockAdapter({ erro: new AiError("INDISPONIVEL", "caiu") }));
+    const r = await servico.polirExperiencia(entrada);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.uso).toEqual({ entrada: 0, saida: 0 });
+  });
+});

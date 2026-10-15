@@ -1,10 +1,12 @@
 import {
   AiError,
+  type Resultado,
   type CodigoAiError,
   type CvAiService,
   type HabilidadeSugerida,
 } from "@cv-express/ai";
 import type { CvData } from "@cv-express/schema";
+import type { OperacaoIa, RegistroUsoIa } from "@cv-express/db";
 
 /**
  * A fronteira da IA vista pelo navegador.
@@ -45,11 +47,18 @@ export type ResultadoIa<T> =
   | { ok: true; dados: T }
   | { ok: false; motivo: MotivoFalhaIa };
 
+/**
+ * Para onde vai o uso de tokens de cada chamada (no app, `registrarUsoIa` do
+ * pacote db). Opcional para os testes que não tratam de uso.
+ */
+export type RegistrarUsoIa = (registro: RegistroUsoIa) => Promise<void>;
+
 export async function polirExperiencia(
   servico: CvAiService,
   cv: CvData,
   experienciaId: string,
   sessionId: string,
+  registrar?: RegistrarUsoIa,
 ): Promise<ResultadoIa<string[]>> {
   const experiencia = cv.experiencias.find((e) => e.id === experienciaId);
   // Item removido enquanto o pedido ia e voltava. Não é falha da IA.
@@ -60,6 +69,7 @@ export async function polirExperiencia(
       { cargo: experiencia.cargo, descricao: experiencia.descricaoOriginal },
       sessionId,
     );
+    await anotarUso(registrar, "experiencia", r);
     return r.ok ? { ok: true, dados: r.dados.bullets } : falha(r.erro);
   });
 }
@@ -68,14 +78,52 @@ export async function normalizarHabilidades(
   servico: CvAiService,
   cv: CvData,
   sessionId: string,
+  registrar?: RegistrarUsoIa,
 ): Promise<ResultadoIa<HabilidadeSugerida[]>> {
   return await tentar(async () => {
     const r = await servico.normalizarHabilidades(
       { texto: cv.habilidades.textoOriginal },
       sessionId,
     );
+    await anotarUso(registrar, "habilidades", r);
     return r.ok ? { ok: true, dados: r.dados.itens } : falha(r.erro);
   });
+}
+
+/**
+ * Anota os tokens de uma chamada: uma linha no log e o agregado do dia.
+ *
+ * O serviço sempre calculou os tokens, e este módulo os jogava fora — o
+ * `IA_TETO_DIARIO` era um palpite sem eles. A falha também é anotada: um
+ * guardrail que descarta a sugestão já gastou os tokens das tentativas.
+ *
+ * Nunca derruba a resposta: se o banco não anotar, a pessoa recebe a
+ * sugestão do mesmo jeito, e o log registra o que faltou. Nada do texto da
+ * pessoa vai para cá — só operação, resultado e números.
+ */
+async function anotarUso(
+  registrar: RegistrarUsoIa | undefined,
+  operacao: OperacaoIa,
+  r: Resultado<unknown>,
+): Promise<void> {
+  const { entrada, saida } = r.uso;
+  // Sucesso sem token nenhum: o modelo nem foi chamado (texto vazio).
+  if (r.ok && entrada + saida === 0) return;
+
+  console.info("[ia] uso", {
+    operacao,
+    ok: r.ok,
+    ...(r.ok ? {} : { motivo: r.erro.codigo }),
+    tokensEntrada: entrada,
+    tokensSaida: saida,
+  });
+
+  if (!registrar) return;
+  try {
+    await registrar({ operacao, ok: r.ok, tokensEntrada: entrada, tokensSaida: saida });
+  } catch (e) {
+    console.error("[ia] o uso não foi anotado no banco", { operacao, erro: String(e) });
+  }
 }
 
 /**

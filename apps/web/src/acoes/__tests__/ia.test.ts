@@ -74,6 +74,7 @@ describe("polirExperiencia", () => {
             "timeout após 30000ms",
             "stack interno do provider",
           ),
+          uso,
         })),
       }),
       cv(),
@@ -95,6 +96,7 @@ describe("polirExperiencia", () => {
         polirExperiencia: vi.fn(async () => ({
           ok: false as const,
           erro: new AiError("INDISPONIVEL", "provider fora do ar", "ECONNREFUSED"),
+          uso,
         })),
       }),
       cv(),
@@ -181,6 +183,7 @@ describe("normalizarHabilidades", () => {
         normalizarHabilidades: vi.fn(async () => ({
           ok: false as const,
           erro: new AiError("GUARDRAIL", "inventou uma habilidade"),
+          uso,
         })),
       }),
       novoCv("s1"),
@@ -188,5 +191,77 @@ describe("normalizarHabilidades", () => {
     );
 
     expect(r).toEqual({ ok: false, motivo: "GUARDRAIL" });
+  });
+});
+
+describe("uso de tokens", () => {
+  /**
+   * O defeito que isto impede: o serviço calculava os tokens de cada chamada
+   * e o app os jogava fora — o teto diário da IA era um palpite.
+   */
+  const registro = () => vi.fn(async () => {});
+
+  it("anota operação, resultado e tokens — e nada do texto da pessoa", async () => {
+    const registrar = registro();
+    await polirExperiencia(
+      servico({ polirExperiencia: vi.fn(async () => ({ ok: true as const, dados: { bullets: ["Desenvolvi APIs"] }, uso })) }),
+      cv(),
+      "e1",
+      "s1",
+      registrar,
+    );
+    expect(registrar).toHaveBeenCalledWith({
+      operacao: "experiencia",
+      ok: true,
+      tokensEntrada: 10,
+      tokensSaida: 20,
+    });
+  });
+
+  it("anota também a falha: o guardrail descarta, mas os tokens foram gastos", async () => {
+    const registrar = registro();
+    await normalizarHabilidades(
+      servico({
+        normalizarHabilidades: vi.fn(async () => ({
+          ok: false as const,
+          erro: new AiError("GUARDRAIL", "inventou"),
+          uso: { entrada: 300, saida: 80 },
+        })),
+      }),
+      { ...cv(), habilidades: { ...cv().habilidades, textoOriginal: "python" } },
+      "s1",
+      registrar,
+    );
+    expect(registrar).toHaveBeenCalledWith({
+      operacao: "habilidades",
+      ok: false,
+      tokensEntrada: 300,
+      tokensSaida: 80,
+    });
+  });
+
+  it("não anota quando o modelo nem foi chamado (texto vazio)", async () => {
+    const registrar = registro();
+    await polirExperiencia(
+      servico({ polirExperiencia: vi.fn(async () => ({ ok: true as const, dados: { bullets: [] }, uso: { entrada: 0, saida: 0 } })) }),
+      cv(),
+      "e1",
+      "s1",
+      registrar,
+    );
+    expect(registrar).not.toHaveBeenCalled();
+  });
+
+  it("banco fora do ar na anotação não tira a sugestão da pessoa", async () => {
+    const r = await polirExperiencia(
+      servico({ polirExperiencia: vi.fn(async () => ({ ok: true as const, dados: { bullets: ["Desenvolvi APIs"] }, uso })) }),
+      cv(),
+      "e1",
+      "s1",
+      vi.fn(async () => {
+        throw new Error("ECONNREFUSED");
+      }),
+    );
+    expect(r).toEqual({ ok: true, dados: ["Desenvolvi APIs"] });
   });
 });

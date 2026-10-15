@@ -57,5 +57,16 @@ export class AiError extends Error {
  * o campo `ok` antes de acessar os dados.
  */
 export type Resultado<T> =
-  | { ok: true; dados: T; uso: { entrada: number; saida: number } }
-  | { ok: false; erro: AiError };
+  | { ok: true; dados: T; uso: UsoDaChamada }
+  /**
+   * A falha também traz o uso. Um guardrail que descarta a sugestão, ou uma
+   * saída inválida duas vezes, já gastou os tokens das tentativas — e são
+   * justamente essas as chamadas caras que a conta precisa enxergar.
+   */
+  | { ok: false; erro: AiError; uso: UsoDaChamada };
+
+/** Tokens gastos numa chamada do serviço, somando as novas tentativas. */
+export interface UsoDaChamada {
+  entrada: number;
+  saida: number;
+}
