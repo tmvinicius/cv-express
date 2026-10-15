@@ -5,9 +5,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { HabilidadeSugerida } from "@cv-express/ai";
 import type { CvData } from "@cv-express/schema";
+import { registrarUsoIa, type RegistroUsoIa } from "@cv-express/db";
 
 import { obterBanco } from "./banco";
-import { salvarEtapa, apagarTudo, comecar } from "./sessao";
+import { salvarDoNavegador, apagarTudo, comecar } from "./sessao";
 import { obterServicoIa } from "./servicoIa";
 import { compilarCv } from "./compilar";
 import { concluirESalvar, type ResultadoConcluir } from "./concluir";
@@ -54,7 +55,7 @@ export async function acaoComecar(_anterior: string | null): Promise<string | nu
 }
 
 export async function acaoSalvar(sessionId: string, cv: CvData): Promise<boolean> {
-  const r = await salvarEtapa(await obterBanco(), sessionId, cv);
+  const r = await salvarDoNavegador(await obterBanco(), sessionId, cv);
   return r.ok;
 }
 
@@ -133,7 +134,7 @@ export async function acaoPolirExperiencia(
   const recusa = await liberarIa(sessionId);
   if (recusa) return { ok: false, motivo: recusa };
 
-  return ia.polirExperiencia(servico, cv, experienciaId, sessionId);
+  return ia.polirExperiencia(servico, cv, experienciaId, sessionId, anotarUsoNoBanco);
 }
 
 export async function acaoNormalizarHabilidades(
@@ -146,7 +147,7 @@ export async function acaoNormalizarHabilidades(
   const recusa = await liberarIa(sessionId);
   if (recusa) return { ok: false, motivo: recusa };
 
-  return ia.normalizarHabilidades(servico, cv, sessionId);
+  return ia.normalizarHabilidades(servico, cv, sessionId, anotarUsoNoBanco);
 }
 
 /**
@@ -162,4 +163,9 @@ async function liberarIa(sessionId: string) {
     origemDoPedido(await headers()),
     tetoDiarioIa(),
   );
+}
+
+/** O agregado diário de tokens (ver `ia.ts`). Sem `export`, pelo mesmo motivo. */
+async function anotarUsoNoBanco(registro: RegistroUsoIa) {
+  await registrarUsoIa(await obterBanco(), registro);
 }
