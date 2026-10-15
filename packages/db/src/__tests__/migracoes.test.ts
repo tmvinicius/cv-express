@@ -64,7 +64,7 @@ describe("0003 — compile_jobs sai", () => {
   it("um banco novo termina sem a tabela", async () => {
     const pg = new PGlite();
     await aplicarMigracoes((sql) => pg.exec(sql));
-    expect(await tabelas(pg)).toEqual(["cv_sessions", "limites_envio", "magic_links"]);
+    expect(await tabelas(pg)).toEqual(["cv_sessions", "limites_envio", "magic_links", "uso_ia"]);
     await pg.close();
   });
 

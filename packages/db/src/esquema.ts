@@ -6,6 +6,8 @@ import {
   integer,
   index,
   primaryKey,
+  date,
+  bigint,
 } from "drizzle-orm/pg-core";
 import type { CvData } from "@cv-express/schema";
 
@@ -126,4 +128,18 @@ export const limitesEnvio = pgTable(
   ],
 );
 
-export const esquema = { cvSessions, magicLinks, limitesEnvio };
+/** Uso da IA por dia (UTC) e operação — ver `usoIa.ts` e a migração 0004. */
+export const usoIa = pgTable(
+  "uso_ia",
+  {
+    dia: date("dia", { mode: "string" }).notNull(),
+    operacao: text("operacao").notNull(),
+    chamadas: integer("chamadas").notNull().default(0),
+    falhas: integer("falhas").notNull().default(0),
+    tokensEntrada: bigint("tokens_entrada", { mode: "number" }).notNull().default(0),
+    tokensSaida: bigint("tokens_saida", { mode: "number" }).notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.dia, t.operacao] })],
+);
+
+export const esquema = { cvSessions, magicLinks, limitesEnvio, usoIa };
