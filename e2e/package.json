@@ -6,13 +6,17 @@
   "description": "Testes de ponta a ponta: navegador, app web, worker e Postgres de verdade",
   "scripts": {
     "e2e": "playwright test",
+    "imagem": "playwright test --config playwright.imagem.config.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
+    "@cv-express/schema": "workspace:*",
+    "@cv-express/templates": "workspace:*",
     "@playwright/test": "^1.64.0",
     "@types/node": "^22.20.4",
     "@types/pg": "^8.11.0",
+    "pdfjs-dist": "^6.4.299",
     "pg": "^8.13.0"
   }
 }

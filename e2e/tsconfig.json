@@ -5,5 +5,11 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["ambiente.ts", "playwright.config.ts", "testes/**/*.ts"]
+  "include": [
+    "ambiente.ts",
+    "playwright.config.ts",
+    "playwright.imagem.config.ts",
+    "testes/**/*.ts",
+    "imagem/**/*.ts"
+  ]
 }
