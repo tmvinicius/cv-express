@@ -5,12 +5,15 @@
 #  typecheck falhando, e a página do link do e-mail no diretório errado (o
 #  build quebrava e todo link enviado daria 404). Os dois seriam pegos aqui.
 #
-#  Dois jobs em paralelo, porque falham por motivos diferentes:
+#  Quatro jobs em paralelo, porque falham por motivos diferentes:
 #    - verificar: build, tipos, lint, testes e o `next build` (verificar:completo);
-#    - e2e: um navegador percorrendo o produto contra Postgres, worker e app.
+#    - e2e: um navegador percorrendo o produto contra Postgres, worker e app;
+#    - vercel: o build do app num clone sem `dist/`, com o comando do vercel.json;
+#    - imagem: a imagem Docker do worker, compilando currículos com o Tectonic
+#      de verdade, dentro da sandbox do docker-compose.
 #
-#  Não há segredo nenhum aqui. A IA roda no modo mock, o e-mail no console e o
-#  Tectonic é o falso de e2e/: nada pago, nada que dependa de chave.
+#  Não há segredo nenhum aqui. A IA roda no modo mock, o e-mail no console e,
+#  no e2e, o Tectonic é o falso de e2e/: nada pago, nada que dependa de chave.
 # ==============================================================================
 name: CI
 
@@ -106,3 +109,66 @@ jobs:
           name: e2e-resultados
           path: e2e/resultados/
           retention-days: 7
+
+  vercel:
+    name: build como na Vercel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - run: pnpm install --frozen-lockfile
+
+      # Nenhum `pnpm run build` antes: a Vercel recebe o repositório sem
+      # `dist/`, e o `verificar` acima não pega isso porque constrói os
+      # pacotes primeiro. Sem a primeira metade do comando, o `next build`
+      # falha ao carregar o next.config.ts. O comando é LIDO do vercel.json,
+      # para que este job teste o que a Vercel roda, e não uma cópia.
+      - name: buildCommand do vercel.json
+        working-directory: apps/web
+        run: sh -c "$(node -p 'require("./vercel.json").buildCommand')"
+
+  imagem:
+    name: imagem do worker (Docker e Tectonic de verdade)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # A fumaça importa os fixtures e o contrato do `dist/` dos pacotes.
+      - run: pnpm install --frozen-lockfile && pnpm run build
+
+      # O mesmo docker-compose de quem desenvolve: a imagem do Dockerfile e a
+      # sandbox (disco só de leitura, sem capabilities, limites de memória e
+      # de processos). O build da imagem já compila um documento de teste; o
+      # --wait espera o healthcheck do compose.
+      - run: docker compose up -d --build --wait latex-worker
+
+      # Acentos, escape, âncoras do .aux, cache e o currículo hostil, num
+      # Tectonic de verdade com o cache embutido e sem baixar nada.
+      - run: pnpm --filter @cv-express/e2e imagem
+        env:
+          WORKER_URL: http://localhost:8080
+          WORKER_TOKEN: token-local-nao-use-em-producao
+
+      # O log do LaTeX nunca vai ao cliente; quando uma compilação falha, o
+      # motivo está aqui, indexado pelo requestId que a fumaça imprime.
+      - name: log do worker
+        if: always()
+        run: docker compose logs latex-worker
