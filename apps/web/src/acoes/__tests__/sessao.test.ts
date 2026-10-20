@@ -1,3 +1,7 @@
+// @vitest-environment node
+// Código de servidor contra o PGlite: no jsdom (o padrão do app web) falta o
+// `Blob.arrayBuffer` que o PGlite 0.5 usa para abrir o banco.
+
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
