@@ -1,8 +1,9 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { obterBanco } from "../../../acoes/banco";
 import { carregarSessao } from "../../../acoes/sessao";
 import { capacidadesDoAmbiente } from "../../../acoes/capacidades";
-import { etapaDaUrl } from "../../../formulario/etapas";
+import { etapaDaUrl, tituloDaEtapa } from "../../../formulario/etapas";
 import { PaginaCliente } from "./PaginaCliente";
 
 /**
@@ -20,12 +21,22 @@ export const dynamic = "force-dynamic";
 /**
  * O endereço do currículo é a chave dele — não há senha. Fora dos buscadores,
  * e sem Referer: um link aberto daqui não leva o id junto para outro site.
+ *
+ * O título muda com a etapa (`tituloDaEtapa` diz por quê). Ele vem só da URL,
+ * sem ler o banco: o mesmo `?etapa=` que a página valida.
  */
-export const metadata = {
-  title: "Seu currículo — CV Express",
-  robots: { index: false, follow: false },
-  referrer: "no-referrer",
-};
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ etapa?: string }>;
+}): Promise<Metadata> {
+  const { etapa } = await searchParams;
+  return {
+    title: tituloDaEtapa(etapaDaUrl(etapa)),
+    robots: { index: false, follow: false },
+    referrer: "no-referrer",
+  };
+}
 
 export default async function PaginaFormulario({
   params,
