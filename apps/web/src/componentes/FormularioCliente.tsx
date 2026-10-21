@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { CategoriaHabilidade, CvData } from "@cv-express/schema";
 
 import { reduzir, type AcaoCv } from "../formulario/reducer";
@@ -120,6 +120,30 @@ export function FormularioCliente({
 
   const progresso = calcularProgresso(etapaInicial, cv);
   const etapa = etapaPorId(etapaInicial);
+
+  /**
+   * A cada troca de etapa: volta ao topo e leva o foco ao `<h1>`.
+   *
+   * A troca é uma navegação no cliente, e nela o navegador não faz nada
+   * sozinho. Medido num celular, antes disto: depois de "Continuar" o foco
+   * ficava no botão, nada era anunciado, e a etapa nova abria rolada para
+   * baixo, com o título fora da tela. Quem usa leitor de tela não sabia que
+   * tinha mudado de etapa; quem enxerga começava pelo meio do formulário.
+   *
+   * Não na primeira renderização — abrir a página já começa do topo, e
+   * roubar o foco ali atrapalharia quem chega pelo link. E não quando a
+   * navegação aponta um item da lista (painel de seções, sugestão de corte):
+   * ali quem rola e foca é a `ListaEditavel`, até o item pedido.
+   */
+  const tituloRef = useRef<HTMLHeadingElement>(null);
+  const etapaAnterior = useRef(etapaInicial);
+  useEffect(() => {
+    if (etapaAnterior.current === etapaInicial) return;
+    etapaAnterior.current = etapaInicial;
+    if (itemEmFoco) return;
+    window.scrollTo({ top: 0 });
+    tituloRef.current?.focus({ preventScroll: true });
+  }, [etapaInicial, itemEmFoco]);
 
   const seguir = useCallback(() => {
     const r = avancar(etapaInicial, cv);
@@ -256,7 +280,7 @@ export function FormularioCliente({
   return (
     <div className="formulario">
       <header className="formulario__cabecalho">
-        <BarraProgresso progresso={progresso} />
+        <BarraProgresso progresso={progresso} tituloRef={tituloRef} />
         <TrilhaEtapas progresso={progresso} aoEscolher={irParaEtapa} />
         <IndicadorAutosave estado={estadoAutosave} />
         {/* Em todas as etapas, e não só no preview: quem volta pelo link está

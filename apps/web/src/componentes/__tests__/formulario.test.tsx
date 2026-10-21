@@ -15,6 +15,15 @@ import type { ResultadoConcluir } from "../../acoes/concluir";
 
 afterEach(cleanup);
 
+// Toda troca de etapa volta ao topo, e o jsdom não implementa rolagem: sem o
+// stub, cada rerender que muda de etapa escreveria "Not implemented" no log.
+// Os testes da troca de etapa conferem o pedido por este mesmo espião.
+let rolar: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  rolar = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+});
+afterEach(() => rolar.mockRestore());
+
 type Props = Parameters<typeof FormularioCliente>[0];
 type HabilidadeSemId = { nome: string; categoria: "tecnica" | "comportamental" | "ferramenta" };
 
@@ -172,6 +181,76 @@ describe("navegação", () => {
     await userEvent.click(within(trilha).getByRole("button", { name: /^objetivo/i }));
 
     expect(aoNavegar).toHaveBeenCalledWith("objetivo");
+  });
+});
+
+describe("troca de etapa: foco no título e volta ao topo", () => {
+  /**
+   * A troca é uma navegação no cliente, e o navegador não faz nada sozinho.
+   * Medido num celular antes disto: o foco ficava no botão "Continuar", nada
+   * era anunciado, e a etapa nova abria rolada para baixo, com o título fora
+   * da tela.
+   */
+  const props = (): Props => ({
+    cvInicial: {
+      ...cvProntoParaGerar(),
+      experiencias: [
+        novaExperiencia({ id: "e1", cargo: "Dev", empresa: "Acme" }),
+        novaExperiencia({ id: "e2", cargo: "Analista", empresa: "Beta" }),
+      ],
+    },
+    etapaInicial: "pessoal",
+    salvar: vi.fn(async () => true),
+    aoNavegar: vi.fn(),
+    pedirSugestaoExperiencia: vi.fn(),
+    pedirSugestaoHabilidades: vi.fn(),
+    compilar: vi.fn(),
+    concluir: vi.fn(),
+    apagarDados: vi.fn(),
+  });
+
+  it("leva o foco ao <h1> da etapa nova e volta ao topo", () => {
+    const p = props();
+    const { rerender } = render(<FormularioCliente {...p} />);
+
+    rerender(<FormularioCliente {...p} etapaInicial="objetivo" />);
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { level: 1, name: "Etapa 2 de 6: Objetivo" }),
+    );
+    expect(rolar).toHaveBeenCalledWith({ top: 0 });
+  });
+
+  it("não mexe no foco ao abrir a página", () => {
+    // Quem chega pelo link do e-mail ou recarrega já começa do topo; roubar o
+    // foco ali só atrapalharia.
+    render(<FormularioCliente {...props()} etapaInicial="objetivo" />);
+
+    expect(document.activeElement).toBe(document.body);
+    expect(rolar).not.toHaveBeenCalled();
+  });
+
+  it("editar dentro da etapa não devolve o foco ao título", async () => {
+    const p = props();
+    const { rerender } = render(<FormularioCliente {...p} />);
+    rerender(<FormularioCliente {...p} etapaInicial="objetivo" />);
+
+    const campo = screen.getByRole("textbox");
+    await userEvent.type(campo, " Com foco em dados.");
+
+    expect(document.activeElement).toBe(campo);
+  });
+
+  it("indo a um item da lista, o foco fica com o item, e não com o título", () => {
+    // O painel de seções e as sugestões de corte apontam um item: ali quem
+    // rola e foca é a lista, até o campo do item pedido.
+    const p = props();
+    const { rerender } = render(<FormularioCliente {...p} />);
+
+    rerender(<FormularioCliente {...p} etapaInicial="experiencias" itemEmFoco="e2" />);
+
+    expect(document.activeElement).toBe(screen.getAllByLabelText(/^Cargo/)[1]);
+    expect(rolar).not.toHaveBeenCalled();
   });
 });
 
