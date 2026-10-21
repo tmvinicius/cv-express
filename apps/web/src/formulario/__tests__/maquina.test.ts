@@ -6,7 +6,14 @@ import {
   type CvData,
 } from "@cv-express/schema";
 
-import { ETAPAS, etapaPorId, etapaDoCampo, ehIdEtapa, etapaDaUrl } from "../etapas";
+import {
+  ETAPAS,
+  etapaPorId,
+  etapaDoCampo,
+  ehIdEtapa,
+  etapaDaUrl,
+  tituloDaEtapa,
+} from "../etapas";
 import {
   avancar,
   voltar,
@@ -166,6 +173,29 @@ describe("etapa vinda da URL", () => {
     // O defeito original: calcularProgresso com etapa desconhecida lançava
     // TypeError no meio do render.
     expect(() => calcularProgresso(etapaDaUrl("boas-vindas"), novoCv("t"))).not.toThrow();
+  });
+});
+
+describe("título da aba", () => {
+  /**
+   * O título era o mesmo em todas as etapas. É ele que o Next anuncia ao
+   * leitor de tela numa navegação no cliente, e com ele igual a troca de
+   * etapa passava em silêncio (medido num navegador).
+   */
+  it("diz a etapa e a posição, como o <h1>", () => {
+    expect(tituloDaEtapa("pessoal")).toBe("Seus dados (etapa 1 de 6) — CV Express");
+    expect(tituloDaEtapa("habilidades")).toBe("Habilidades (etapa 6 de 6) — CV Express");
+  });
+
+  it("fora das etapas de preenchimento, não inventa posição", () => {
+    expect(tituloDaEtapa("preview")).toBe("Seu currículo — CV Express");
+    expect(tituloDaEtapa("gerando")).not.toMatch(/etapa \d/);
+  });
+
+  it("cada etapa tem um título diferente", () => {
+    // Igual em duas etapas, a troca entre elas voltaria a não ser anunciada.
+    const titulos = ETAPAS.map((e) => tituloDaEtapa(e.id));
+    expect(new Set(titulos).size).toBe(titulos.length);
   });
 });
 

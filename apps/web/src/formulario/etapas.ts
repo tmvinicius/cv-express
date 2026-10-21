@@ -208,6 +208,25 @@ export function etapaDaUrl(valor: string | undefined): IdEtapa {
   return ehIdEtapa(valor) ? valor : "pessoal";
 }
 
+/**
+ * O título da aba em cada etapa: "Objetivo (etapa 2 de 6) — CV Express".
+ *
+ * Era o mesmo em todas, e é o título que o Next anuncia ao leitor de tela
+ * numa navegação no cliente — com ele igual, trocar de etapa não anunciava
+ * nada. Também é o que aparece no histórico do navegador e no menu do
+ * Voltar, onde seis entradas iguais não diziam para onde se voltava.
+ *
+ * Fora das seis de preenchimento (gerando, preview) não há posição a dizer,
+ * pela mesma razão do `<h1>` da `BarraProgresso`.
+ */
+export function tituloDaEtapa(id: IdEtapa): string {
+  const contaveis = ETAPAS.filter((e) => e.contaNoProgresso);
+  const posicao = contaveis.findIndex((e) => e.id === id) + 1;
+  const { rotulo } = etapaPorId(id);
+  const onde = posicao > 0 ? `${rotulo} (etapa ${posicao} de ${contaveis.length})` : rotulo;
+  return `${onde} — CV Express`;
+}
+
 export function etapaPorId(id: IdEtapa): Etapa {
   const e = ETAPAS.find((x) => x.id === id);
   if (!e) throw new Error(`Etapa desconhecida: ${id}`);
