@@ -14,15 +14,16 @@ argumento em vez de seguir a regra no automático.
 
 ```bash
 pnpm install
-pnpm run verificar            # build + typecheck + lint + testes — 792 testes
+pnpm run verificar            # build + typecheck + lint + testes — 799 testes
 pnpm run verificar:completo   # o mesmo + build do worker e `next build`
 pnpm run e2e                  # navegador de verdade; precisa de build e DATABASE_URL
 ```
 
-O CI (`.github/workflows/ci.yml`) roda o `verificar:completo` e o E2E a cada
-push e PR. Ele existe porque o `main` ficou quebrado duas vezes sem ninguém
-notar. Um job vermelho não é ruído para contornar: é o defeito que chegaria à
-produção.
+O CI (`.github/workflows/ci.yml`) roda a cada push e PR o
+`verificar:completo`, o E2E, o build do app como a Vercel o faz (clone sem
+`dist/`) e a imagem Docker do worker compilando currículos de verdade. Ele
+existe porque o `main` ficou quebrado duas vezes sem ninguém notar. Um job
+vermelho não é ruído para contornar: é o defeito que chegaria à produção.
 
 O `verificar` NÃO roda o `next build`, e o `next build` é o único passo que
 checa a fronteira entre página de servidor e componente de cliente como ela
@@ -153,7 +154,12 @@ O teste "500 em falha do LaTeX, SEM vazar o log" protege isso.
 | Cotas da IA e da compilação, teto diário da IA, sessões novas por IP, limite do autosave | `apps/web/src/acoes/cotas.ts` |
 | O autosave que vem do navegador (cota + gravação) | `apps/web/src/acoes/sessao.ts` (`salvarDoNavegador`) |
 | Tokens gastos pela IA, por dia: onde se anota / onde fica | `apps/web/src/acoes/ia.ts` (`anotarUso`) / `packages/db/src/usoIa.ts`, tabela `uso_ia` |
-| Acessibilidade medida no navegador (axe) | `e2e/testes/acessibilidade.spec.ts` |
+| Acessibilidade medida no navegador (axe, troca de etapa) | `e2e/testes/acessibilidade.spec.ts` |
+| Título da aba em cada etapa | `apps/web/src/formulario/etapas.ts` (`tituloDaEtapa`), usado no `generateMetadata` de `app/cv/[id]/page.tsx` |
+| Foco e rolagem na troca de etapa | `apps/web/src/componentes/FormularioCliente.tsx` (efeito sobre `etapaInicial`) |
+| Implantação: banco, migrações, worker, Vercel | `IMPLANTACAO.md` |
+| Comando de build da Vercel | `apps/web/vercel.json` (`buildCommand`), provado pelo job `vercel` do CI |
+| Fumaça contra a imagem do worker no ar | `e2e/imagem/`, `e2e/playwright.imagem.config.ts` (`pnpm --filter @cv-express/e2e imagem`) |
 | Título, descrição e prévia de compartilhamento (Open Graph), ícone | `apps/web/src/compartilhamento/metadados.ts`, `app/opengraph-image.tsx`, `app/icon.svg` |
 | Cabeçalhos de segurança (fixos) e a CSP com nonce | `apps/web/src/seguranca/cabecalhos.ts`; aplicados em `next.config.ts` e `src/middleware.ts` |
 | Página de erro e 404 genérico | `apps/web/src/app/error.tsx`, `app/not-found.tsx` |
@@ -409,6 +415,44 @@ Do mesmo jeito, cada tela de etapa tem um `<h1>` (a posição na trilha, em
 está. Não o troque por `<span>` para "acertar o tamanho" — o CSS já o deixa
 com a aparência de antes.
 
+### Trocar de etapa é navegar no cliente — e o navegador não faz nada sozinho
+
+Ter o `<h1>` não bastava: depois de "Continuar", o foco ficava no botão,
+nada era anunciado e, no celular, a etapa nova abria rolada para baixo.
+Duas peças resolvem, e as duas são necessárias:
+
+- **o título da aba muda com a etapa** (`tituloDaEtapa`). É o que o
+  anunciador do Next lê numa navegação no cliente; com título igual em duas
+  etapas, a troca entre elas volta a ser muda. Há teste exigindo um título
+  por etapa;
+- **o `FormularioCliente` rola ao topo e foca o `<h1>`** a cada troca — não
+  na primeira renderização, e não quando a navegação aponta um item da
+  lista, porque ali o foco é da `ListaEditavel`. Uma navegação nova que
+  precise focar outra coisa entra nessa mesma exceção, senão o efeito do
+  formulário (que roda depois do dos filhos) rouba o foco dela.
+
+O E2E confere a passagem numa tela de celular; o axe sozinho não pega isso,
+porque mede cada tela parada.
+
+### Teste com PGlite no app web roda no ambiente `node`
+
+O `apps/web` testa no jsdom por padrão, e o PGlite 0.5 usa
+`Blob.arrayBuffer`, que o jsdom não tem: todo teste de servidor que abria
+um banco falhou com `r.arrayBuffer is not a function` (era o que segurava o
+PR do Dependabot com o PGlite, o `pg` e o SDK da IA). Arquivo de teste novo
+que use o PGlite começa com `// @vitest-environment node`, como os quatro de
+`acoes/__tests__/`.
+
+### Dependência de teste no worker vai parar dentro da imagem
+
+O Dockerfile instala tudo para compilar e depois roda `pnpm install --prod`.
+Isso tira os atalhos das dependências de desenvolvimento, mas os arquivos
+ficam em `node_modules/.pnpm` e são copiados para o estágio final — medido
+com o `pdfjs-dist`: 35 MB a mais dentro da sandbox. Por isso a fumaça da
+imagem mora em `e2e/`, e o `apps/latex-worker` não tem `devDependencies`.
+Se um dia precisar ter, troque a cópia do `node_modules` por `pnpm deploy
+--prod` e meça o estágio final.
+
 ### Falha da IA também gasta token
 
 O `Resultado` de `packages/ai` traz `uso` nos dois ramos, sucesso e falha. Uma
@@ -521,14 +565,19 @@ leva direto ao item. O que ainda falta:
    conferida no log (`[expurgo] concluído`).
 4. Conta no Resend com o domínio do remetente verificado, e um envio real
    testado — nenhum saiu até hoje.
-5. A imagem do worker construída com o Tectonic 0.17.0 e um PDF de verdade
-   gerado por ela.
+5. O job `imagem` do CI verde — a imagem construída com o Tectonic 0.17.0 e
+   PDFs de verdade gerados por ela —, e a mesma fumaça contra o worker de
+   produção.
 6. `IA_TETO_DIARIO` ajustado ao orçamento da IA. O padrão (1000 pedidos por
    dia) é um número de partida, não uma medida de custo. A medida passa a
    existir com o primeiro dia de uso real, na tabela `uso_ia` (consulta no
    README).
-7. O CI rodando verde no GitHub — ele foi escrito e validado com actionlint,
-   mas nunca executou lá — e o `main` protegido para exigi-lo antes do merge.
+7. O `main` protegido para exigir o CI antes do merge. O CI já roda verde no
+   GitHub; os jobs `vercel` e `imagem` são os mais novos.
+
+O passo a passo de implantação está em `IMPLANTACAO.md`. Ele foi escrito sem
+nenhuma implantação real: quem implantar primeiro, corrija o que estiver
+errado ali.
 
 **O que JÁ foi verificado em compilação real, com Tectonic 0.17.0:** o
 `cvexpress.cls` (fontes carregadas pelo nome do arquivo), a macro `\cvCampo`
@@ -539,10 +588,12 @@ arquivo e nos testes que usam o `.aux` e o PDF reais como fixture.
 **A imagem Docker agora fixa o Tectonic 0.17.0** — a mesma versão das
 medições. Ela fixava 0.15.0 enquanto `paginas.test.ts` afirmava "a mesma
 toolchain do worker". O SHA-256 do 0.17.0 foi calculado sobre o artefato
-oficial do release. **A construção da imagem com 0.17.0 ainda não foi
-executada**: o ambiente onde a troca foi feita não tinha daemon do Docker nem
-acesso ao host do bundle (`relay.fullyjustified.net`). Quem construir
-primeiro, confirme e apague este parágrafo.
+oficial do release. **A imagem inteira ainda não foi construída fora do
+CI.** Em 17/10, com Docker mas sem acesso a `github.com` nem ao host do
+bundle (`relay.fullyjustified.net`), o estágio `build` construiu, e o estágio
+final subiu com toda a sandbox do compose usando um Tectonic falso. O
+estágio `latex` e a compilação real dentro da imagem são o job `imagem` do
+CI. Quando ele passar pela primeira vez, apague este parágrafo.
 
 **O fluxo de ponta a ponta é verificado com Tectonic FALSO** — agora por
 uma suíte fixa em `e2e/`, e não mais à mão: Postgres real, worker real e
