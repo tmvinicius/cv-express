@@ -107,6 +107,23 @@ curl -X POST localhost:8080/compilar \
 Para um `CvData` válido sem escrever à mão, use as fixtures de
 `@cv-express/templates/fixtures` (`cvMinimo`, `cvCompleto`, `cvExtremo`).
 
+Ou rode a fumaça que o CI roda, contra qualquer worker no ar — o do compose
+ou o de produção. Ela compila o currículo completo e o hostil e confere o
+PDF por dentro: acentos e `& % $` no texto, a âncora do nome no `.aux`, o
+cache na segunda compilação e as cargas do hostil impressas como texto.
+
+```bash
+pnpm install && pnpm run build
+WORKER_URL=http://localhost:8080 WORKER_TOKEN=um-token-qualquer \
+  pnpm --filter @cv-express/e2e imagem
+```
+
+A fumaça mora em `e2e/imagem/`, e não aqui, de propósito: ela lê o PDF com o
+`pdfjs-dist`, e uma dependência de desenvolvimento deste pacote acaba DENTRO
+da imagem. O `pnpm install --prod` do Dockerfile tira o atalho dela, mas os
+arquivos ficam no `node_modules/.pnpm` — medido: 35 MB de PDF.js no estágio
+final, código que a sandbox não usa.
+
 ## O que já foi conferido em compilação real
 
 Com **Tectonic 0.17.0** e a fixture `completa`:
@@ -119,12 +136,21 @@ Com **Tectonic 0.17.0** e a fixture `completa`:
   xdvipdfmx emite guarda as páginas num object stream comprimido, onde a
   busca por `/Type /Page` não acha nada.
 
-**Ainda por conferir:** a imagem construída com o 0.17.0. Ela fixava 0.15.0
-até esta correção, e a troca foi feita num ambiente sem Docker. Ao construir,
-o estágio `latex` compila `aquecimento.tex` como teste de fumaça — se o
-`.cls` não compilar com a versão da imagem, o build falha ali, e não em
-produção. Confira também a acentuação (`ção ã õ é ê á`) no PDF gerado pela
-imagem.
+**Ainda por conferir:** a imagem INTEIRA construída com o 0.17.0. O que já
+foi, em 17/10, num ambiente com Docker mas sem acesso a `github.com` nem a
+`relay.fullyjustified.net`:
+
+- o estágio `build` construiu de verdade (`pnpm install` filtrado, build,
+  reinstalação só de produção);
+- o estágio final, com o estágio `latex` trocado por um Tectonic falso,
+  construiu e subiu pelo `docker-compose.yml` com toda a sandbox — disco só
+  de leitura, `/tmp` sem execução, nenhuma capability, limites — como o
+  usuário 10001, saudável no healthcheck, e a fumaça passou em tudo o que
+  não depende do Tectonic de verdade.
+
+O estágio `latex` — o download conferido por SHA-256 e o `aquecimento.tex`
+compilado dentro do build — e a compilação real dentro da imagem ficam com o
+job `imagem do worker` do CI. Quando ele passar, apague este parágrafo.
 
 Se as posições falharem, **o produto continua de pé**: o preview usa o
 painel lateral de seções, que o planejamento define como caminho principal.
