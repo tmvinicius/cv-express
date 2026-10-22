@@ -55,7 +55,7 @@ estava no formulário", porque o usuário nunca edita LaTeX.
 | Worker         | Fastify 5                             |                                                                   |
 | IA             | SDK da Anthropic + adapter OpenAI-compatível + mock | Provider trocável por variável de ambiente          |
 | Preview        | PDF.js (build legacy)                 | As páginas desenhadas em canvas: funciona no celular, onde o leitor de PDF do navegador não existe |
-| Testes         | Vitest 2, Testing Library, PGlite     | 792 testes; o banco de teste é Postgres de verdade, em memória    |
+| Testes         | Vitest 2, Testing Library, PGlite     | 799 testes; o banco de teste é Postgres de verdade, em memória    |
 | Ponta a ponta  | Playwright                            | Navegador real contra app, worker e Postgres; roda no CI          |
 | Ids            | nanoid                                | Ids estáveis por item de lista                                    |
 
@@ -116,9 +116,9 @@ packages/templates    116 testes
 packages/ai            80 testes
 packages/db            60 testes
 apps/latex-worker      52 testes
-apps/web              446 testes
+apps/web              453 testes
 ─────────────────────────────────
-total                 792 testes
+total                 799 testes
 ```
 
 O build vem antes porque os pacotes se importam via `dist/` — um build velho
@@ -137,7 +137,9 @@ que o "Começar" funciona sem JavaScript, os cabeçalhos de segurança, o 404
 em português e a prévia de compartilhamento (tags e imagem). E passam o axe
 (WCAG 2.1 A e AA, mais as boas práticas) em nove telas, do início ao
 preview: ele mede o contraste do que o navegador desenha, e não só o das
-cores declaradas na paleta.
+cores declaradas na paleta. Numa tela de celular, conferem também a
+passagem de uma etapa para outra: o título da aba anunciado, o foco no
+título da etapa e a etapa aberta do topo.
 
 ```bash
 docker compose up -d postgres            # ou qualquer Postgres
@@ -156,10 +158,21 @@ como qualquer outra. Com um Chromium já instalado, aponte
 
 ### Integração contínua
 
-`.github/workflows/ci.yml` roda, a cada push no `main` e a cada PR, dois jobs
-em paralelo: o `verificar:completo` e o E2E, com um Postgres 16 de serviço.
+`.github/workflows/ci.yml` roda, a cada push no `main` e a cada PR, quatro
+jobs em paralelo:
+
+- **build, tipos, lint e testes** — o `verificar:completo`;
+- **ponta a ponta** — o E2E, com um Postgres 16 de serviço;
+- **build como na Vercel** — o comando de `apps/web/vercel.json` num clone
+  sem `dist/`, como a Vercel o recebe;
+- **imagem do worker** — `docker compose up --build` da imagem de produção,
+  com a sandbox do compose, e a fumaça de `e2e/imagem/`: currículos de
+  verdade compilados pelo Tectonic de dentro da imagem, conferindo acentos,
+  escape, âncoras do `.aux`, cache e o currículo hostil.
+
 Não usa segredo nenhum. Se o E2E falha, o relatório, o trace e o log do app
-ficam como artefato `e2e-resultados` por 7 dias.
+ficam como artefato `e2e-resultados` por 7 dias; se a imagem falha, o log
+do worker sai no próprio job.
 
 ### Subindo o app inteiro
 
@@ -344,6 +357,7 @@ o fluxo.
 | `pnpm run verificar:completo`                    | O mesmo + build do worker e `next build`                 |
 | `pnpm migrar`                                    | Aplica as migrações no banco de `DATABASE_URL`. Idempotente |
 | `pnpm run e2e`                                   | Testes de ponta a ponta (precisa de build e de `DATABASE_URL`) |
+| `pnpm --filter @cv-express/e2e imagem`           | Fumaça contra um worker no ar (`WORKER_URL`, `WORKER_TOKEN`) — a imagem do compose ou a de produção |
 | `pnpm --filter @cv-express/ai contrato:real`     | Contrato da IA contra o provider do ambiente — pago; ver `packages/ai/README.md` |
 | `pnpm run build`                                 | Compila os pacotes de `packages/`                        |
 | `pnpm run test`                                  | Só os testes (para no primeiro pacote que falhar)        |
@@ -360,11 +374,13 @@ A compilação `.tex → PDF` foi verificada com **Tectonic 0.17.0**: o
 coordenadas e a contagem de páginas. A imagem Docker fixa essa mesma versão,
 com o binário conferido por SHA-256.
 
-> ⚠️ **A imagem com o 0.17.0 ainda não foi construída.** Ela fixava 0.15.0 —
-> uma versão diferente da usada em todas as medições — e a troca foi feita
-> num ambiente sem Docker. Na primeira construção, o estágio `latex` compila
-> `aquecimento.tex` como teste de fumaça. Detalhes em
-> [`apps/latex-worker/README.md`](./apps/latex-worker/README.md).
+> ⚠️ **A imagem inteira ainda não foi construída fora do CI.** O estágio de
+> build (Node, `pnpm install`, compilação do worker) foi construído em 17/10,
+> e o estágio final subiu com a sandbox do compose e um Tectonic falso. O
+> estágio `latex` precisa baixar o Tectonic e o bundle, e o ambiente onde
+> isso foi feito não alcança esses endereços. A construção completa e a
+> compilação real dentro da imagem são o job `imagem do worker` do CI.
+> Detalhes em [`apps/latex-worker/README.md`](./apps/latex-worker/README.md).
 
 Sem Tectonic, `/compilar` responde 500 `FALHA_LATEX` — e o log do LaTeX fica
 no servidor, como deve.
@@ -381,11 +397,12 @@ no servidor, como deve.
 | `packages/i18n` — rótulos pt-BR                           | ✅                                   |
 | `packages/ai` — serviço, adapters, guardrails             | ✅ 80 testes contra o mock; contrato contra provider real pronto ([roteiro](./packages/ai/README.md)), nunca rodado contra um modelo |
 | `packages/db` — sessões, link mágico, limites de uso      | ✅ 60 testes, contra Postgres real   |
-| `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 51 testes                         |
+| `apps/latex-worker` — API, fila, cache, sandbox           | ✅ 52 testes                         |
 | `apps/web` — 6 etapas, trilha, autosave, sugestões de IA  | ✅ roda localmente                   |
-| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 446 testes no app; fluxo verificado no navegador |
+| `apps/web` — "gerando", preview, download, painel, aviso de páginas | ✅ 453 testes no app; fluxo verificado no navegador |
 | Compilação real `.tex → PDF`                              | ✅ verificada com Tectonic 0.17.0    |
-| Imagem Docker do worker com 0.17.0                        | ⚠️ nunca construída                 |
+| Imagem Docker do worker com 0.17.0                        | ⚠️ estágio de build e sandbox verificados localmente; imagem inteira só no job `imagem do worker`, que ainda não rodou |
+| Build na Vercel a partir de um clone limpo                | ✅ comando do `vercel.json` verificado localmente; implantação real nunca feita ([roteiro](./IMPLANTACAO.md)) |
 | Tela "gerando" com narração em etapas                     | ✅                                   |
 | LGPD — apagar meus dados, página de privacidade           | ✅ verificado no navegador; texto sem revisão jurídica |
 | Script de migração e `.env.example`                       | ✅ `pnpm migrar` verificado em Postgres real; teste cobra que o `.env.example` lista tudo o que o código lê |
@@ -395,19 +412,22 @@ no servidor, como deve.
 | Limite do salvamento automático por sessão                | ✅ testado contra Postgres (PGlite)  |
 | Uso de tokens da IA anotado por dia (`uso_ia`)            | ✅ testado contra o mock; nenhum token de verdade gasto ainda |
 | Acessibilidade medida pelo axe (WCAG 2.1 AA) no E2E       | ✅ 9 telas sem violação; leitor de tela de verdade nunca usado |
+| Troca de etapa anunciada (título da aba, foco, topo)      | ✅ medida no E2E numa tela de celular |
 | Expurgo diário agendado                                   | ✅ rota verificada; agendamento da Vercel nunca executado |
 | Envio real pelo Resend                                    | ⚠️ nunca executado                  |
 | Cabeçalhos de segurança e CSP com nonce                   | ✅ verificados no navegador, sem violação no fluxo |
 | Página de erro e 404 em português                         | ✅ verificados com o banco fora do ar |
-| Testes de ponta a ponta (Playwright)                      | ✅ 9 testes, verdes localmente      |
+| Testes de ponta a ponta (Playwright)                      | ✅ 10 testes verdes localmente; os 9 anteriores também no CI |
 | Preview do PDF no celular (PDF.js)                        | ✅ Chromium com tela de Pixel 7; aparelho de verdade nunca testado |
 | Dependências de produção sem vulnerabilidade conhecida    | ✅ `pnpm audit --prod` limpo em 14/10; Dependabot configurado |
 | Prévia de compartilhamento (Open Graph) e ícone           | ✅ tags e imagem conferidas; prévia num app de mensagem nunca vista |
-| CI no GitHub Actions                                      | ⚠️ escrito e validado com actionlint; ainda não rodou no GitHub |
+| CI no GitHub Actions                                      | ✅ verde no `main` (verificar e E2E); os jobs da Vercel e da imagem são novos e ainda não rodaram |
 
 ### Antes de abrir ao público
 
-O código da V1 está completo. O que falta é configuração e conferência:
+O código da V1 está completo. O que falta é configuração e conferência. O
+passo a passo de implantação — banco, migrações, worker e Vercel — está em
+[`IMPLANTACAO.md`](./IMPLANTACAO.md).
 
 1. `PRIVACIDADE_CONTATO` definido. Sem ele, `/privacidade` diz que o canal
    não está configurado, e a LGPD exige um.
@@ -418,14 +438,15 @@ O código da V1 está completo. O que falta é configuração e conferência:
    conferida no log (`[expurgo] concluído`).
 4. Conta no Resend com o domínio do remetente verificado, e um envio real
    testado — nenhum saiu até hoje.
-5. A imagem do worker construída com o Tectonic 0.17.0 e um PDF de verdade
-   gerado por ela.
+5. O job `imagem do worker` verde no CI — a imagem construída com o
+   Tectonic 0.17.0 e PDFs de verdade gerados por ela —, e a mesma fumaça
+   rodada contra o worker de produção (`IMPLANTACAO.md`, passo 3).
 6. `IA_TETO_DIARIO` ajustado ao orçamento da IA (o padrão é 1000 pedidos por
    dia), com a média de tokens por pedido dos primeiros dias tirada da
    tabela `uso_ia` (consulta em "Quanto a IA está gastando"), e o aviso
    `[cotas] teto diário da IA atingido` acompanhado no log.
-7. O CI verde no GitHub, e o `main` protegido para exigi-lo antes do merge
-   (Settings → Branches). Sem a proteção, o CI avisa mas não impede.
+7. O `main` protegido para exigir o CI antes do merge (Settings →
+   Branches). Sem a proteção, o CI avisa mas não impede.
 8. Com o domínio no ar e `APP_URL` apontando para ele, colar o link num
    chat (WhatsApp, LinkedIn) e conferir a prévia: título, descrição e
    imagem. Ela só pode ser vista de um endereço público.
