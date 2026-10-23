@@ -26,16 +26,16 @@
     "nanoid": "^5.0.9"
   },
   "peerDependencies": {
-    "pg": "^8.13.0"
+    "pg": "^8.23.1"
   },
   "peerDependenciesMeta": {
     "pg": { "optional": true }
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.2.0",
+    "@electric-sql/pglite": "^0.5.10",
     "@types/node": "^22.20.4",
     "@types/pg": "^8.11.0",
     "drizzle-kit": "^0.31.11",
-    "pg": "^8.13.0"
+    "pg": "^8.23.1"
   }
 }

@@ -21,13 +21,13 @@
     "@cv-express/templates": "workspace:*",
     "next": "^15.5.27",
     "pdfjs-dist": "^6.4.299",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.2.0",
+    "@electric-sql/pglite": "^0.5.10",
     "@testing-library/react": "^16.1.0",
-    "@testing-library/user-event": "^14.5.0",
+    "@testing-library/user-event": "^14.6.8",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
@@ -35,6 +35,6 @@
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "jsdom": "^25.0.0",
-    "typescript-eslint": "^8.71.0"
+    "typescript-eslint": "^8.72.0"
   }
 }
